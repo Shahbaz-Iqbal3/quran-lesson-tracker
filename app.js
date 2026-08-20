@@ -6,6 +6,36 @@
 
 const BRAND_COLORS = ['#176B52', '#2E8B68', '#3F6C7A', '#6B5CA5', '#C58A32'];
 
+const QURAN_FONTS = {
+  amiri:        { label: 'Amiri Quran',        css: "'Amiri Quran', 'Traditional Arabic', serif" },
+  indopak:      { label: 'Indo-Pak',           css: "'IndoPak', 'Amiri Quran', 'Traditional Arabic', serif" },
+  scheherazade: { label: 'Scheherazade',       css: "'Scheherazade New', 'Scheherazade', 'Traditional Arabic', serif" },
+  traditional:  { label: 'Traditional Arabic',  css: "'Traditional Arabic', 'Geeza Pro', serif" },
+  naskh:        { label: 'Naskh (Noto)',       css: "'Noto Naskh Arabic', 'Droid Arabic Naskh', 'Naskh', serif" },
+  serif:        { label: 'System serif',       css: 'serif' }
+};
+const UI_FONTS = {
+  inter:    { label: 'Inter (default)',   css: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
+  fraunces: { label: 'Fraunces (serif)',  css: "'Fraunces', Georgia, 'Times New Roman', serif" }
+};
+
+function quranFontCss() {
+  const f = QURAN_FONTS[state.settings.quranFont];
+  return f ? f.css : QURAN_FONTS.amiri.css;
+}
+function uiFontCss() {
+  const f = UI_FONTS[state.settings.uiFont];
+  return f ? f.css : UI_FONTS.inter.css;
+}
+function applyFonts() {
+  const root = document.documentElement;
+  root.style.setProperty('--font-arabic', quranFontCss());
+  root.style.setProperty('--font-ui', uiFontCss());
+}
+function quranCanvasFont(size) {
+  return `400 ${size}px ${quranFontCss()}`;
+}
+
 const DB_NAME = 'sabaq-db';
 const DB_VERSION = 1;
 const STORES = ['students', 'lessons', 'settings'];
@@ -14,7 +44,7 @@ const state = {
   view: 'students',
   students: [],
   lessons: [],
-  settings: { schoolName: '', logoDataUrl: '', brandColorIdx: 0 },
+  settings: { schoolName: '', logoDataUrl: '', brandColorIdx: 0, quranFont: 'amiri', uiFont: 'inter' },
   quran: [],
   surahIndex: [],
   currentStudentId: null,
@@ -747,7 +777,7 @@ function openReaderSurahOnly(surahId) {
 async function ensureFontsReady() {
   const specs = [
     '700 30px Inter', '500 26px Inter', '600 22px Inter', '500 22px Inter',
-    '700 76px Inter', '400 96px "Amiri Quran"', '700 120px Inter',
+    '700 76px Inter', quranCanvasFont(96), '700 120px Inter',
     'italic 400 26px Inter', '400 22px Inter'
   ];
   await Promise.all(specs.map(s => document.fonts.load(s).catch(() => {})));
@@ -824,7 +854,7 @@ async function drawShareCard(lesson) {
   for (const line of nameLines.slice(0, 2)) { ctx.fillText(line, cx, y); y += 86; }
   y += 30;
 
-  ctx.font = '400 96px "Amiri Quran"';
+  ctx.font = quranCanvasFont(96);
   ctx.fillText(meta.name, cx, y);
   y += 110;
 
@@ -1157,6 +1187,16 @@ function renderSettingsView() {
     preview.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9"/><path d="M3 15l4.5-4.5a2 2 0 0 1 2.83 0L15 15"/><path d="M14 14l1.5-1.5a2 2 0 0 1 2.83 0L21 15"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>`;
   }
   renderBrandColorRow();
+  renderFontSelect('select-quran-font', QURAN_FONTS, state.settings.quranFont || 'amiri');
+  renderFontSelect('select-ui-font', UI_FONTS, state.settings.uiFont || 'inter');
+}
+
+function renderFontSelect(id, map, current) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  sel.innerHTML = Object.keys(map).map(k =>
+    `<option value="${k}" ${k === current ? 'selected' : ''}>${map[k].label}</option>`
+  ).join('');
 }
 
 function renderBrandColorRow() {
@@ -1252,6 +1292,14 @@ function wireEvents() {
 
   document.getElementById('btn-add-student').addEventListener('click', openAddStudentSheet);
   document.getElementById('btn-open-settings').addEventListener('click', () => { renderSettingsView(); showView('settings'); });
+  document.getElementById('select-quran-font').addEventListener('change', async (e) => {
+    await saveSettingsField('quranFont', e.target.value);
+    applyFonts();
+  });
+  document.getElementById('select-ui-font').addEventListener('change', async (e) => {
+    await saveSettingsField('uiFont', e.target.value);
+    applyFonts();
+  });
   document.getElementById('input-search-students').addEventListener('input', (e) => {
     e.stopPropagation();
     renderStudents();
@@ -1404,6 +1452,7 @@ async function init() {
   await loadQuranData();
   populateSurahSelect();
   await loadAppData();
+  applyFonts();
   renderStudents();
 
   if ('serviceWorker' in navigator) {
