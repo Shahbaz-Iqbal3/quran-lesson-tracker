@@ -1,7 +1,7 @@
-'use strict';
+ï»¿'use strict';
 
 /* =========================================================================
-   SABAQ — Quran lesson tracker (minimalist redesign)
+   SABAQ â€” Quran lesson tracker (minimalist redesign)
    ========================================================================= */
 
 const BRAND_COLORS = ['#176B52', '#2E8B68', '#3F6C7A', '#6B5CA5', '#C58A32'];
@@ -303,7 +303,7 @@ function renderStudents() {
   const subtitle = document.getElementById('students-subtitle');
   const total = state.students.length;
 
-  subtitle.textContent = `${total} students · Today`;
+  subtitle.textContent = `${total} students Â· Today`;
 
   let completedToday = 0;
   for (const s of state.students) {
@@ -330,10 +330,10 @@ function renderStudents() {
     let sub;
     if (last) {
       const meta = surahMeta(last.surahId);
-      sub = `Surah ${meta.translit} · ${last.startAyah}–${last.endAyah}`;
+      sub = `Surah ${meta.translit} Â· ${last.startAyah}â€“${last.endAyah}`;
     } else if (student.surahId && student.ayah) {
       const meta = surahMeta(student.surahId);
-      sub = `Surah ${meta.translit} · Ayah ${student.ayah}`;
+      sub = `Surah ${meta.translit} Â· Ayah ${student.ayah}`;
     } else {
       sub = 'No lessons yet';
     }
@@ -449,9 +449,9 @@ function renderStudentDetail() {
         <div class="history-body">
           <div class="ref-line">
             <span class="surah-name">${escapeHtml(meta.translit)}</span>
-            <span class="ayat-range">${lesson.startAyah}–${lesson.endAyah}</span>
+            <span class="ayat-range">${lesson.startAyah}â€“${lesson.endAyah}</span>
           </div>
-          <div class="date">${lesson.time ? `Completed · ${escapeHtml(lesson.time)}` : 'Completed'}</div>
+          <div class="date">${lesson.time ? `Completed Â· ${escapeHtml(lesson.time)}` : 'Completed'}</div>
         </div>
         <div class="history-actions">
           <button class="icon-btn-sm" data-action="share" aria-label="Share">
@@ -519,7 +519,7 @@ function renderReaderContent(surahId) {
 
   const heading = document.createElement('div');
   heading.className = 'surah-heading';
-  heading.innerHTML = `<div class="name-ar">${surah.name}</div><div class="name-translit">${meta.id}. ${meta.translit} · ${meta.count} ayat</div>`;
+  heading.innerHTML = `<div class="name-ar">${surah.name}</div><div class="name-translit">${meta.id}. ${meta.translit} Â· ${meta.count} ayat</div>`;
   container.appendChild(heading);
 
   if (surahId !== 9 && surahId !== 1) {
@@ -662,7 +662,7 @@ function openLessonConfirmSheet() {
   if (!student) return;
 
   document.getElementById('lesson-student-name').textContent = `For ${student.name}`;
-  document.getElementById('lesson-range-text').textContent = `${meta.translit} · ${pl.start}–${pl.end}`;
+  document.getElementById('lesson-range-text').textContent = `${meta.translit} Â· ${pl.start}â€“${pl.end}`;
   document.getElementById('input-lesson-note').value = '';
   openSheet('sheet-lesson');
 }
@@ -720,7 +720,7 @@ function editLesson(lessonId) {
     `For ${student ? student.name : ''}`;
   const meta = surahMeta(lesson.surahId);
   document.getElementById('lesson-range-text').textContent =
-    `${meta.translit} · ${lesson.startAyah}–${lesson.endAyah}`;
+    `${meta.translit} Â· ${lesson.startAyah}â€“${lesson.endAyah}`;
   document.getElementById('input-lesson-note').value = lesson.note || '';
   openSheet('sheet-lesson');
 }
@@ -759,7 +759,7 @@ function applyManualRange() {
   pl.start = start;
   pl.end = end;
 
-  document.getElementById('lesson-range-text').textContent = `${meta.translit} · ${start}–${end}`;
+  document.getElementById('lesson-range-text').textContent = `${meta.translit} Â· ${start}â€“${end}`;
   closeSheet('sheet-manual-range');
 }
 
@@ -800,7 +800,7 @@ function openReaderSurahOnly(surahId) {
   renderReaderContent(surahId);
 }
 
-/* ---------------------------- Share card (canvas) — minimalist ---------------------------- */
+/* ---------------------------- Share card (canvas) â€” minimalist ---------------------------- */
 
 async function ensureFontsReady() {
   const specs = [
@@ -889,7 +889,7 @@ async function drawShareCard(lesson) {
   ctx.fillStyle = '#6B7470';
   ctx.font = '500 22px Inter';
   ctx.letterSpacing = '2px';
-  ctx.fillText(`SURAH ${meta.id} · ${meta.translit.toUpperCase()}`, cx, y);
+  ctx.fillText(`SURAH ${meta.id} Â· ${meta.translit.toUpperCase()}`, cx, y);
   ctx.letterSpacing = '0px';
   y += 90;
 
@@ -900,7 +900,7 @@ async function drawShareCard(lesson) {
 
   ctx.fillStyle = brand;
   ctx.font = '700 120px Inter';
-  ctx.fillText(`${lesson.startAyah} — ${lesson.endAyah}`, cx, y + 20);
+  ctx.fillText(`${lesson.startAyah} â€” ${lesson.endAyah}`, cx, y + 20);
   y += 170;
 
   ctx.strokeStyle = '#E7EBE9';
@@ -917,7 +917,7 @@ async function drawShareCard(lesson) {
 
   ctx.fillStyle = '#6B7470';
   ctx.font = '500 22px Inter';
-  ctx.fillText(`Sabaq recorded · ${formatDateHuman(lesson.date)}`, cx, H - 90);
+  ctx.fillText(`Sabaq recorded Â· ${formatDateHuman(lesson.date)}`, cx, H - 90);
 
   ctx.textAlign = 'left';
 }
@@ -947,7 +947,7 @@ async function openShareSheet(lessonId) {
   state.shareLessonId = lessonId;
   const student = state.students.find(s => s.id === lesson.studentId);
   document.getElementById('share-sub').textContent =
-    `For ${student ? student.name : ''} · ${formatDateHuman(lesson.date)}`;
+    `For ${student ? student.name : ''} Â· ${formatDateHuman(lesson.date)}`;
   openSheet('sheet-share');
   await drawShareCard(lesson);
 }
@@ -991,7 +991,7 @@ async function shareCardWhatsapp() {
     }
   }
   await shareCardDownload();
-  toast('Image saved — attach it in WhatsApp');
+  toast('Image saved â€” attach it in WhatsApp');
   const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
   window.open(waUrl, '_blank');
 }

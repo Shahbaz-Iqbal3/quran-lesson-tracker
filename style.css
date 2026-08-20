@@ -373,8 +373,6 @@ main.view {
   direction: rtl; text-align: right; flex: 1; color: var(--text);
 }
 .ayah-block.in-range { background: var(--accent-soft); }
-.ayah-block.range-start, .ayah-block.range-end { box-shadow: 0 0 0 2px var(--accent); }
-.ayah-block.range-start .ayah-num, .ayah-block.range-end .ayah-num { background: var(--accent); border-color: var(--accent); color: #fff; }
 .ayah-block.target-flash { animation: flash 1.2s ease; }
 @keyframes flash {
   0%, 100% { background: transparent; }
