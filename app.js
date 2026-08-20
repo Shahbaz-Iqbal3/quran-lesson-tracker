@@ -262,6 +262,8 @@ const state = {
   shareLessonId: null
 };
 
+let pendingContinue = null;
+
 let dbPromise = null;
 
 function openDb() {
@@ -459,8 +461,9 @@ async function loadAppData() {
   if (settingsRow) state.settings = Object.assign(state.settings, settingsRow.value);
 }
 
-function showView(name, direction) {
+function showView(name, direction, animate) {
   if (direction !== 'back') direction = 'forward';
+  if (animate === undefined) animate = true;
   state.view = name;
   document.querySelectorAll('.app-view').forEach(v => {
     v.classList.add('hidden');
@@ -469,7 +472,7 @@ function showView(name, direction) {
   const view = document.getElementById('view-' + name);
   view.classList.remove('hidden');
   void view.offsetWidth;
-  view.classList.add(direction === 'back' ? 'view-in-back' : 'view-in-forward');
+  if (animate) view.classList.add(direction === 'back' ? 'view-in-back' : 'view-in-forward');
   document.getElementById('bottom-nav').classList.toggle('hidden', name === 'detail');
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', (name === 'students' && b.dataset.tab === 'students') ||
@@ -506,9 +509,16 @@ function openSheet(id) {
   ov.classList.add('anim-open');
   lockBackgroundScroll();
 }
-function closeSheet(id) {
+function closeSheet(id, skipAnim) {
   const ov = document.getElementById(id);
   if (ov.classList.contains('hidden')) {
+    if (!isAnySheetOpen()) unlockBackgroundScroll();
+    return;
+  }
+  if (skipAnim) {
+    ov.classList.add('hidden');
+    const sh = ov.querySelector('.sheet');
+    if (sh) sh.style.transform = '';
     if (!isAnySheetOpen()) unlockBackgroundScroll();
     return;
   }
@@ -619,30 +629,27 @@ function renderStudentDetail() {
   if (!base) {
     continueCard.classList.add('hidden');
     firstBtn.classList.remove('hidden');
+    pendingContinue = null;
   } else {
     const next = nextAyahRef(base.surahId, base.ayah);
+    const last = lastLessonFor(student.id);
     firstBtn.classList.add('hidden');
     continueCard.classList.remove('hidden');
-    const last = lastLessonFor(student.id);
 
-    if (!next) {
-      document.getElementById('continue-surah').textContent = '';
-      document.getElementById('continue-ayah').textContent = '';
-      document.getElementById('continue-desc').textContent = 'Completed the Quran';
-      continueCard.dataset.nextSurah = '';
-      continueCard.dataset.nextAyah = '';
-      document.getElementById('btn-continue').classList.add('hidden');
-    } else {
-      const nextMeta = surahMeta(next.surahId);
-      document.getElementById('continue-surah').textContent = nextMeta.translit;
-      document.getElementById('continue-ayah').textContent = `${next.ayah} ?`;
-      document.getElementById('continue-desc').textContent =
-        last ? `Last lesson ended at Ayah ${base.ayah}`
-             : `Starting from ${surahMeta(base.surahId).translit} ${base.ayah}`;
-      continueCard.dataset.nextSurah = next.surahId;
-      continueCard.dataset.nextAyah = next.ayah;
-      document.getElementById('btn-continue').classList.remove('hidden');
-    }
+    const reviewSurah = last ? last.surahId : base.surahId;
+    const reviewAyah = last ? last.endAyah : base.ayah;
+    const reviewMeta = surahMeta(reviewSurah);
+    document.getElementById('continue-surah').textContent = reviewMeta.translit;
+    document.getElementById('continue-ayah').textContent =
+      last ? `${last.startAyah}–${last.endAyah}` : `${base.ayah}`;
+    document.getElementById('continue-desc').textContent =
+      next ? (last ? 'Review last lesson · then assign the next'
+                    : `Starting from ${reviewMeta.translit} ${base.ayah}`)
+           : 'Completed the Quran';
+    continueCard.dataset.lastSurah = reviewSurah;
+    continueCard.dataset.lastAyah = reviewAyah;
+    pendingContinue = next ? { studentId: student.id, surahId: next.surahId, ayah: next.ayah } : null;
+    document.getElementById('btn-continue').classList.remove('hidden');
   }
 
   const lessons = lessonsForStudent(student.id);
@@ -719,8 +726,29 @@ function populateAyahSelect(surahId) {
   sel.innerHTML = opts;
 }
 
+function showAssignNextButton(show) {
+  document.getElementById('btn-assign-next').classList.toggle('hidden', !show);
+}
+
+function highlightRange(surahId, start, end) {
+  const sel$ = ayahSelector();
+  for (let a = start; a <= end; a++) {
+    const el = document.querySelector(`${sel$}[data-ayah="${a}"]`);
+    if (el) el.classList.add('in-range');
+  }
+}
+
+function openReaderReviewLast(studentId, surahId, ayah) {
+  resetSelection();
+  openReader(surahId, ayah);
+  const last = lastLessonFor(studentId);
+  if (last) highlightRange(last.surahId, last.startAyah, last.endAyah);
+  showAssignNextButton(!!pendingContinue);
+}
+
 function openReader(surahId, ayah, opts) {
   opts = opts || {};
+  showAssignNextButton(false);
   state.readerSurahId = surahId;
   document.getElementById('select-surah').value = String(surahId);
   populateAyahSelect(surahId);
@@ -890,6 +918,7 @@ function resetSelection() {
   };
   document.getElementById('selecting-banner').classList.add('hidden');
   document.getElementById('btn-reader-confirm').classList.add('hidden');
+  showAssignNextButton(false);
   applySelectionHighlight();
 }
 
@@ -1672,7 +1701,7 @@ function attachSheetDismiss(overlay) {
       const h = sheet.offsetHeight;
       if (dy > Math.min(130, h * 0.4)) {
         sheet.style.transform = `translateY(${h}px)`;
-        setTimeout(() => { closeSheet(id); sheet.style.transform = ''; }, 220);
+        setTimeout(() => { closeSheet(id, true); }, 200);
       } else {
         sheet.style.transform = '';
       }
@@ -1990,10 +2019,10 @@ function wireEvents() {
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       resetSelection();
-      if (btn.dataset.tab === 'students') showView('students');
+      if (btn.dataset.tab === 'students') showView('students', undefined, false);
       else if (btn.dataset.tab === 'reader') openReader(state.readerSurahId || 1, null);
-      else if (btn.dataset.tab === 'learn') { showView('learn'); renderLearnView(); }
-      else if (btn.dataset.tab === 'settings') { renderSettingsView(); showView('settings'); }
+      else if (btn.dataset.tab === 'learn') { showView('learn', undefined, false); renderLearnView(); }
+      else if (btn.dataset.tab === 'settings') { renderSettingsView(); showView('settings', undefined, false); }
     });
   });
 
@@ -2039,10 +2068,16 @@ function wireEvents() {
 
   document.getElementById('btn-continue').addEventListener('click', () => {
     const card = document.getElementById('continue-card');
-    const surahId = parseInt(card.dataset.nextSurah, 10);
-    const ayah = parseInt(card.dataset.nextAyah, 10);
-    if (!surahId || isNaN(surahId)) { toast('This student has completed the Quran'); return; }
-    beginContinueLesson(state.currentStudentId, surahId, ayah);
+    const surahId = parseInt(card.dataset.lastSurah, 10);
+    const ayah = parseInt(card.dataset.lastAyah, 10);
+    if (!surahId || isNaN(surahId)) { toast('No lesson to review yet'); return; }
+    openReaderReviewLast(state.currentStudentId, surahId, ayah);
+  });
+  document.getElementById('btn-assign-next').addEventListener('click', () => {
+    if (!pendingContinue) return;
+    const pc = pendingContinue;
+    showAssignNextButton(false);
+    beginContinueLesson(pc.studentId, pc.surahId, pc.ayah);
   });
   document.getElementById('btn-first-lesson').addEventListener('click', () => {
     beginFreshLesson(state.currentStudentId);
