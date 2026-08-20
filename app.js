@@ -4,8 +4,6 @@
    SABAQ — Quran lesson tracker (minimalist redesign)
    ========================================================================= */
 
-const BRAND_COLORS = ['#176B52', '#2E8B68', '#3F6C7A', '#6B5CA5', '#C58A32'];
-
 const QURAN_FONTS = {
   amiri:        { label: 'Amiri Quran',        css: "'Amiri Quran', 'Traditional Arabic', serif" },
   indopak:      { label: 'Indo-Pak',           css: "'IndoPak', 'Amiri Quran', 'Traditional Arabic', serif" },
@@ -250,7 +248,7 @@ const state = {
   view: 'students',
   students: [],
   lessons: [],
-  settings: { schoolName: '', logoDataUrl: '', brandColorIdx: 0, quranFont: 'amiri', quranFontSize: 25, uiFont: 'inter', readerMode: 'line' },
+  settings: { schoolName: '', logoDataUrl: '', teacherName: '', quranFont: 'amiri', quranFontSize: 25, uiFont: 'inter', readerMode: 'line' },
   quran: [],
   surahIndex: [],
   currentStudentId: null,
@@ -1128,6 +1126,7 @@ async function drawShareCard(lesson) {
 
   const studentName = (student?.name || 'Student').trim() || 'Student';
   const schoolName = (state.settings.schoolName || '').trim() || 'Irshad e Madinah Online';
+  const teacherName = (state.settings.teacherName || '').trim() || schoolName;
 
   const nameInitials = initials(studentName);
 
@@ -1384,10 +1383,15 @@ async function drawShareCard(lesson) {
   await drawSVG(patternSVG, 815, 30, 235, 235);
 
   // ---------------------------------------------------------
-  // HEADER
+  // LOGO
   // ---------------------------------------------------------
 
-  await drawSVG(logoSVG, 245, 95, 105, 105);
+  if (state.settings.logoDataUrl) {
+    const logoImg = await loadImage(state.settings.logoDataUrl);
+    ctx.drawImage(logoImg, 245, 95, 105, 105);
+  } else {
+    await drawSVG(logoSVG, 245, 95, 105, 105);
+  }
 
   drawText(schoolName, 360, 167, '800 38px Inter', GREEN);
   drawText('Quran Lesson Report', 430, 207, '500 25px Inter', GREY);
@@ -1513,7 +1517,7 @@ async function drawShareCard(lesson) {
   await drawSVG(teacherSVG, 700, 1120, 58, 58);
 
   drawText('TEACHER', 768, 1145, '700 16px Inter', GREY);
-  drawText(schoolName, 768, 1178, '500 19px Inter', BLACK);
+  drawText(teacherName, 768, 1178, '500 19px Inter', BLACK);
 
   // ---------------------------------------------------------
   // FOOTER
@@ -1861,13 +1865,13 @@ async function deleteCurrentStudent() {
 
 function renderSettingsView() {
   document.getElementById('input-school-name').value = state.settings.schoolName || '';
+  document.getElementById('input-teacher-name').value = state.settings.teacherName || '';
   const preview = document.getElementById('logo-preview');
   if (state.settings.logoDataUrl) {
     preview.innerHTML = `<img src="${state.settings.logoDataUrl}" alt="Logo">`;
   } else {
     preview.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9"/><path d="M3 15l4.5-4.5a2 2 0 0 1 2.83 0L15 15"/><path d="M14 14l1.5-1.5a2 2 0 0 1 2.83 0L21 15"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>`;
   }
-  renderBrandColorRow();
   renderFontSelect('select-quran-font', QURAN_FONTS, state.settings.quranFont || 'amiri');
   renderFontSelect('select-ui-font', UI_FONTS, state.settings.uiFont || 'inter');
   renderQuranSizeSelect();
@@ -1898,21 +1902,6 @@ function renderQuranSizeSelect() {
   sel.innerHTML = QURAN_SIZES.map(s =>
     `<option value="${s}" ${s === current ? 'selected' : ''}>${s}px</option>`
   ).join('');
-}
-
-function renderBrandColorRow() {
-  const row = document.getElementById('brand-color-row');
-  const selected = state.settings.brandColorIdx || 0;
-  row.innerHTML = BRAND_COLORS.map((c, i) =>
-    `<div class="color-dot ${i === selected ? 'selected' : ''}" data-idx="${i}" style="background:${c}"></div>`
-  ).join('');
-  row.querySelectorAll('.color-dot').forEach(dot => {
-    dot.addEventListener('click', () => {
-      row.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
-      dot.classList.add('selected');
-      saveSettingsField('brandColorIdx', parseInt(dot.dataset.idx, 10));
-    });
-  });
 }
 
 async function saveSettingsField(key, value) {
@@ -2147,6 +2136,7 @@ function wireEvents() {
   document.getElementById('btn-upload-logo').addEventListener('click', () => document.getElementById('input-logo').click());
   document.getElementById('input-logo').addEventListener('change', (e) => handleLogoUpload(e.target.files[0]));
   document.getElementById('input-school-name').addEventListener('change', (e) => saveSettingsField('schoolName', e.target.value.trim()));
+  document.getElementById('input-teacher-name').addEventListener('change', (e) => saveSettingsField('teacherName', e.target.value.trim()));
   document.getElementById('btn-export-data').addEventListener('click', exportBackup);
   document.getElementById('btn-import-data').addEventListener('click', () => document.getElementById('input-import').click());
   document.getElementById('input-import').addEventListener('change', (e) => importBackup(e.target.files[0]));

@@ -392,7 +392,7 @@ main.view {
 .ayah-flow {
   margin: 0; direction: rtl; font-family: 'Amiri Quran'; font-size: var(--quran-font-size);
   text-align: center; line-height: 1.9;
-  padding: 0 12px;
+  padding: 0;
 }
 .reader-content.inline-mode .surah-heading,
 .reader-content.inline-mode .bismillah { direction: ltr; }
