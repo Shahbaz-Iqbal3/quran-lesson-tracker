@@ -31,6 +31,7 @@ function applyFonts() {
   const root = document.documentElement;
   root.style.setProperty('--font-arabic', quranFontCss());
   root.style.setProperty('--font-ui', uiFontCss());
+  root.style.setProperty('--quran-font-size', (state.settings.quranFontSize || 25) + 'px');
 }
 function quranCanvasFont(size) {
   return `400 ${size}px ${quranFontCss()}`;
@@ -249,7 +250,7 @@ const state = {
   view: 'students',
   students: [],
   lessons: [],
-  settings: { schoolName: '', logoDataUrl: '', brandColorIdx: 0, quranFont: 'amiri', uiFont: 'inter', readerMode: 'line' },
+  settings: { schoolName: '', logoDataUrl: '', brandColorIdx: 0, quranFont: 'amiri', quranFontSize: 25, uiFont: 'inter', readerMode: 'line' },
   quran: [],
   surahIndex: [],
   currentStudentId: null,
@@ -1869,6 +1870,7 @@ function renderSettingsView() {
   renderBrandColorRow();
   renderFontSelect('select-quran-font', QURAN_FONTS, state.settings.quranFont || 'amiri');
   renderFontSelect('select-ui-font', UI_FONTS, state.settings.uiFont || 'inter');
+  renderQuranSizeSelect();
   renderReaderModeSegmented();
 }
 
@@ -1884,6 +1886,17 @@ function renderFontSelect(id, map, current) {
   if (!sel) return;
   sel.innerHTML = Object.keys(map).map(k =>
     `<option value="${k}" ${k === current ? 'selected' : ''}>${map[k].label}</option>`
+  ).join('');
+}
+
+const QURAN_SIZES = [18, 20, 22, 25, 28, 32, 36, 42];
+
+function renderQuranSizeSelect() {
+  const sel = document.getElementById('select-quran-size');
+  if (!sel) return;
+  const current = state.settings.quranFontSize || 25;
+  sel.innerHTML = QURAN_SIZES.map(s =>
+    `<option value="${s}" ${s === current ? 'selected' : ''}>${s}px</option>`
   ).join('');
 }
 
@@ -2033,6 +2046,10 @@ function wireEvents() {
   document.getElementById('btn-open-settings').addEventListener('click', () => { renderSettingsView(); showView('settings'); });
   document.getElementById('select-quran-font').addEventListener('change', async (e) => {
     await saveSettingsField('quranFont', e.target.value);
+    applyFonts();
+  });
+  document.getElementById('select-quran-size').addEventListener('change', async (e) => {
+    await saveSettingsField('quranFontSize', parseInt(e.target.value, 10));
     applyFonts();
   });
   document.getElementById('select-ui-font').addEventListener('change', async (e) => {
