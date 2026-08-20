@@ -1339,6 +1339,58 @@ function wireEvents() {
   });
 }
 
+/* ---------------------------- Hardware back button (Android) ---------------------------- */
+/* Trap the browser back via the History API so the device back button walks one
+   step back inside the app (close sheets, then views) instead of closing it. */
+
+let exitToastShown = false;
+let exitToastTimer = null;
+
+function doAppBack() {
+  const sheets = [...document.querySelectorAll('.sheet-overlay')]
+    .filter(o => !o.classList.contains('hidden'));
+  if (sheets.length) {
+    sheets[sheets.length - 1].classList.add('hidden');
+    return true;
+  }
+  const jump = document.getElementById('jump-panel');
+  if (!jump.classList.contains('hidden')) {
+    jump.classList.add('hidden');
+    document.getElementById('reader-content').classList.remove('hidden');
+    return true;
+  }
+  if (state.selection && state.selection.active) {
+    resetSelection();
+    return true;
+  }
+  switch (state.view) {
+    case 'detail': detailBack(); return true;
+    case 'reader': readerBack(); return true;
+    case 'settings': showView('students'); return true;
+    case 'students': {
+      const search = document.getElementById('input-search-students');
+      if (search.value) { search.value = ''; renderStudents(); return true; }
+      return false;
+    }
+  }
+  return false;
+}
+
+function onHardwareBack() {
+  if (doAppBack()) {
+    exitToastShown = false;
+    if (exitToastTimer) clearTimeout(exitToastTimer);
+    history.pushState({ app: 1 }, '');
+    return;
+  }
+  if (!exitToastShown) {
+    exitToastShown = true;
+    toast('Press back again to exit');
+    history.pushState({ app: 1 }, '');
+    exitToastTimer = setTimeout(() => { exitToastShown = false; }, 2000);
+  }
+}
+
 /* ---------------------------- Init ---------------------------- */
 
 async function init() {
@@ -1347,6 +1399,8 @@ async function init() {
   attachReaderSwipe();
   attachEdgeBack('view-detail', detailBack);
   attachEdgeBack('view-reader', readerBack);
+  history.pushState({ app: 1 }, '');
+  window.addEventListener('popstate', onHardwareBack);
   await loadQuranData();
   populateSurahSelect();
   await loadAppData();
