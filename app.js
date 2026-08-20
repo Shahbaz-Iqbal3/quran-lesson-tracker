@@ -786,18 +786,20 @@ function renderReaderContent(surahId) {
   heading.innerHTML = `<div class="name-ar">${surah.name}</div><div class="name-translit">${meta.id}. ${meta.translit} · ${meta.count} ayat</div>`;
   container.appendChild(heading);
 
-  if (surahId !== 9 && surahId !== 1) {
+  if (surahId !== 9) {
     const bismillah = document.createElement('div');
     bismillah.className = 'bismillah';
     bismillah.textContent = 'بسم الله الرحمن الرحيم';
     container.appendChild(bismillah);
   }
 
+  const skipBismillah = (surahId === 1);
   if (inline) {
     const flow = document.createElement('p');
     flow.className = 'ayah-flow';
     surah.verses.forEach((text, idx) => {
-      const ayahNum = idx + 1;
+      if (skipBismillah && idx === 0) return;
+      const ayahNum = skipBismillah ? idx : idx + 1;
       const span = document.createElement('span');
       span.className = 'ayah-inline';
       span.dataset.ayah = String(ayahNum);
@@ -809,7 +811,8 @@ function renderReaderContent(surahId) {
     container.appendChild(flow);
   } else {
     surah.verses.forEach((text, idx) => {
-      const ayahNum = idx + 1;
+      if (skipBismillah && idx === 0) return;
+      const ayahNum = skipBismillah ? idx : idx + 1;
       const block = document.createElement('div');
       block.className = 'ayah-block';
       block.dataset.ayah = String(ayahNum);

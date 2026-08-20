@@ -382,23 +382,43 @@ main.view {
 /* ---- Inline (continuous Mushaf-style) reading mode ---- */
 .reader-content.inline-mode {
   font-family: var(--font-arabic); font-size: 27px; line-height: 2.5;
-  direction: rtl; text-align: justify; text-align-last: right; padding: 4px 2px 20px;
+  direction: rtl; text-align: justify; text-align-last: right; padding: 4px 2px calc(var(--nav-h) + 24px + var(--safe-bottom));
 }
 .ayah-flow {
-  margin: 0; direction: rtl; font-family: 'Amiri Quran'; font-size: 37px;
-  text-align: right; line-height: 1.9;
+  margin: 0; direction: rtl; font-family: 'Amiri Quran'; font-size: 27px;
+  text-align: center; line-height: 1.9;
   padding: 0 12px;
   border: 1.5px solid rgba(23, 107, 82, 0.55);
   border-radius: 10px;
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
-    transparent calc(70.3px - 1px),
-    rgba(23, 107, 82, 0.38) calc(70.3px - 1px),
-    rgba(23, 107, 82, 0.38) 70.3px
+    transparent calc(1.9em - 1px),
+    rgba(23, 107, 82, 0.38) calc(1.9em - 1px),
+    rgba(23, 107, 82, 0.38) 1.9em
   );
   background-position: 0 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background-attachment: local;
 }
+
+/* The reader view scrolls inside its own viewport (instead of the window) so the
+   ruled grid only paints the visible tiles. On mobile a CSS background on a single
+   element taller than the GPU max texture (~4096px) silently stops painting, which
+   made the lines vanish on long surahs. Scoped scroll + background-attachment:local
+   avoids that while keeping the grid aligned to the text. */
+#view-reader {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+#reader-content.reader-view { flex: 1; min-height: 0; }
+#reader-content:not(.inline-mode) { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#reader-content.inline-mode { overflow: hidden; display: flex; flex-direction: column; }
 .reader-content.inline-mode .surah-heading,
 .reader-content.inline-mode .bismillah { direction: ltr; }
 .ayah-inline {
