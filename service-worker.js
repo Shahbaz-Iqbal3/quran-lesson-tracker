@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sabaq-cache-v1';
+const CACHE_NAME = 'sabaq-cache-v2';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -8,9 +8,6 @@ const CORE_ASSETS = [
   './data/quran-data.json',
   './data/surah-index.json',
   './assets/fonts/amiri-quran-400.woff2',
-  './assets/fonts/fraunces-600.woff2',
-  './assets/fonts/fraunces-700.woff2',
-  './assets/fonts/fraunces-900.woff2',
   './assets/fonts/inter-400.woff2',
   './assets/fonts/inter-500.woff2',
   './assets/fonts/inter-600.woff2',

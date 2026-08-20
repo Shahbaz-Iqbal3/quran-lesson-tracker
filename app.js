@@ -1,47 +1,31 @@
 'use strict';
 
 /* =========================================================================
-   SABAQ — Quran lesson tracker
-   Single-file app logic: storage, navigation, reader, share-card export.
+   SABAQ � Quran lesson tracker (minimalist redesign)
    ========================================================================= */
 
-/* ---------------------------- Constants ---------------------------- */
-
-const AVATAR_COLORS = ['#123832', '#B08D2B', '#5C7A5A', '#A8562E', '#6B5CA5', '#3F6C7A'];
+const BRAND_COLORS = ['#176B52', '#2E8B68', '#3F6C7A', '#6B5CA5', '#C58A32'];
 
 const DB_NAME = 'sabaq-db';
 const DB_VERSION = 1;
 const STORES = ['students', 'lessons', 'settings'];
 
-/* ---------------------------- State ---------------------------- */
-
 const state = {
-  view: 'students',           // students | detail | reader | settings
+  view: 'students',
   students: [],
   lessons: [],
   settings: { schoolName: '', logoDataUrl: '', brandColorIdx: 0 },
-  quran: [],                  // [{id, name, translit, verses:[...]}]
-  surahIndex: [],             // [{id, name, translit, count}]
+  quran: [],
+  surahIndex: [],
   currentStudentId: null,
-
-  // reader / selection state
   readerSurahId: 1,
   selection: {
-    active: false,            // true while picking start/end via tap
-    mode: null,               // 'start' | 'end'
-    forStudentId: null,
-    surahId: null,
-    start: null,
-    end: null,
-    lockedSurah: false,       // true once a start ayah has been tapped
-    editingLessonId: null     // set when re-selecting range for an existing lesson
+    active: false, mode: null, forStudentId: null, surahId: null,
+    start: null, end: null, lockedSurah: false, complete: false, editingLessonId: null
   },
-
-  pendingLesson: null,        // {studentId, surahId, start, end, lessonId?}
+  pendingLesson: null,
   shareLessonId: null
 };
-
-/* ---------------------------- IndexedDB ---------------------------- */
 
 let dbPromise = null;
 
@@ -101,8 +85,6 @@ async function dbClearAll() {
   })));
 }
 
-/* ---------------------------- Utilities ---------------------------- */
-
 function uid() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -134,6 +116,11 @@ function formatDateHuman(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function formatMonthYear(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
 function lessonsForStudent(studentId) {
   return state.lessons
     .filter(l => l.studentId === studentId)
@@ -145,6 +132,21 @@ function lastLessonFor(studentId) {
   return list.length ? list[0] : null;
 }
 
+function dayLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const today = new Date(todayIso() + 'T00:00:00');
+  const diff = Math.round((today - d) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str == null ? '' : str;
+  return d.innerHTML;
+}
+
 function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -153,16 +155,47 @@ function toast(msg) {
   toast._t = setTimeout(() => el.classList.add('hidden'), 2200);
 }
 
-/** Given a surah+ayah, return the next ayah reference (rolling into next surah if needed). */
+let _confirmResolve = null;
+
+function confirmDialog(opts) {
+  opts = opts || {};
+  const overlay = document.getElementById('sheet-confirm');
+  document.getElementById('confirm-title').textContent = opts.title || 'Are you sure?';
+  document.getElementById('confirm-message').textContent = opts.message || '';
+  const okBtn = document.getElementById('btn-confirm-ok');
+  okBtn.textContent = opts.confirmText || 'Confirm';
+  okBtn.className = 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary');
+  document.getElementById('btn-confirm-cancel').textContent = opts.cancelText || 'Cancel';
+  return new Promise((resolve) => {
+    _confirmResolve = resolve;
+    overlay.classList.remove('hidden');
+  });
+}
+
+function _closeConfirm(result) {
+  const overlay = document.getElementById('sheet-confirm');
+  overlay.classList.add('hidden');
+  if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
+}
+
 function nextAyahRef(surahId, ayah) {
   const meta = surahMeta(surahId);
   if (!meta) return null;
   if (ayah < meta.count) return { surahId, ayah: ayah + 1 };
   if (surahId < 114) return { surahId: surahId + 1, ayah: 1 };
-  return null; // end of Quran
+  return null;
 }
 
-/* ---------------------------- Data loading ---------------------------- */
+function studentNextStart(student) {
+  const last = lastLessonFor(student.id);
+  if (student.surahId && student.ayah) {
+    return { surahId: student.surahId, ayah: student.ayah };
+  }
+  if (last) {
+    return { surahId: last.surahId, ayah: last.endAyah };
+  }
+  return null;
+}
 
 async function loadQuranData() {
   const [quranRes, indexRes] = await Promise.all([
@@ -185,67 +218,97 @@ async function loadAppData() {
   if (settingsRow) state.settings = Object.assign(state.settings, settingsRow.value);
 }
 
-/* ---------------------------- View navigation ---------------------------- */
-
 function showView(name) {
   state.view = name;
   document.querySelectorAll('.app-view').forEach(v => v.classList.add('hidden'));
   document.getElementById('view-' + name).classList.remove('hidden');
-  document.getElementById('bottom-nav').classList.toggle('hidden', name === 'detail' || name === 'settings');
+  document.getElementById('bottom-nav').classList.toggle('hidden', name === 'detail');
   document.querySelectorAll('.nav-btn').forEach(b => {
-    b.classList.toggle('active', (name === 'students' && b.dataset.tab === 'students') || (name === 'reader' && b.dataset.tab === 'reader'));
+    b.classList.toggle('active', (name === 'students' && b.dataset.tab === 'students') ||
+                                 (name === 'reader' && b.dataset.tab === 'reader') ||
+                                 (name === 'settings' && b.dataset.tab === 'settings'));
   });
   window.scrollTo(0, 0);
 }
 
-function openSheet(id) { document.getElementById(id).classList.remove('hidden'); }
+function openSheet(id) {
+  const ov = document.getElementById(id);
+  const sh = ov.querySelector('.sheet');
+  if (sh) sh.style.transform = '';
+  ov.classList.remove('hidden');
+}
 function closeSheet(id) { document.getElementById(id).classList.add('hidden'); }
-
-/* ---------------------------- Rendering: Students list ---------------------------- */
 
 function renderStudents() {
   const list = document.getElementById('student-list');
   const empty = document.getElementById('student-empty');
-  list.innerHTML = '';
+  const subtitle = document.getElementById('students-subtitle');
+  const total = state.students.length;
 
-  if (!state.students.length) {
+  subtitle.textContent = `${total} students � Today`;
+
+  let completedToday = 0;
+  for (const s of state.students) {
+    if (lessonsForStudent(s.id).some(l => l.date === todayIso())) completedToday++;
+  }
+  document.getElementById('progress-text').textContent = `${completedToday} / ${total}`;
+  document.getElementById('progress-fill').style.width =
+    total ? (completedToday / total * 100) + '%' : '0%';
+
+  const q = (document.getElementById('input-search-students').value || '').trim().toLowerCase();
+
+  list.innerHTML = '';
+  if (!total) {
     empty.classList.remove('hidden');
+    list.classList.add('hidden');
     return;
   }
-  empty.classList.add('hidden');
 
+  let rendered = 0;
   for (const student of state.students) {
-    const last = lastLessonFor(student.id);
-    const card = document.createElement('button');
-    card.className = 'student-card';
-    card.setAttribute('data-student-id', student.id);
+    if (q && !student.name.toLowerCase().includes(q)) continue;
 
-    let threadHtml = `<div class="empty-note">No lessons yet</div>`;
+    const last = lastLessonFor(student.id);
+    let sub;
     if (last) {
       const meta = surahMeta(last.surahId);
-      threadHtml = `<div class="thread-line"><span class="dot"></span>${meta.translit} ${last.startAyah}–${last.endAyah} · ${formatDateHuman(last.date)}</div>`;
+      sub = `Surah ${meta.translit} � ${last.startAyah}�${last.endAyah}`;
+    } else if (student.surahId && student.ayah) {
+      const meta = surahMeta(student.surahId);
+      sub = `Surah ${meta.translit} � Ayah ${student.ayah}`;
+    } else {
+      sub = 'No lessons yet';
     }
 
+    const hasToday = lessonsForStudent(student.id).some(l => l.date === todayIso());
+    const statusHtml = hasToday
+      ? `<div class="status status-completed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M20 6L9 17l-5-5"/></svg>Completed</div>`
+      : `<div class="status status-pending"><span class="dot"></span>Pending</div>`;
+
+    const card = document.createElement('button');
+    card.className = 'student-row';
+    card.setAttribute('data-student-id', student.id);
     card.innerHTML = `
-      <div class="avatar" style="background:${AVATAR_COLORS[student.colorIdx % AVATAR_COLORS.length]}">${initials(student.name)}</div>
+      <div class="avatar">${initials(student.name)}</div>
       <div class="info">
         <div class="name">${escapeHtml(student.name)}</div>
-        ${threadHtml}
+        <div class="sub">${escapeHtml(sub)}</div>
       </div>
-      <svg class="chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      ${statusHtml}
     `;
     card.addEventListener('click', () => openStudentDetail(student.id));
     list.appendChild(card);
+    rendered++;
+  }
+
+  if (rendered === 0) {
+    empty.classList.remove('hidden');
+    list.classList.add('hidden');
+  } else {
+    empty.classList.add('hidden');
+    list.classList.remove('hidden');
   }
 }
-
-function escapeHtml(str) {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
-}
-
-/* ---------------------------- Rendering: Student detail ---------------------------- */
 
 function openStudentDetail(studentId) {
   state.currentStudentId = studentId;
@@ -257,89 +320,108 @@ function renderStudentDetail() {
   const student = state.students.find(s => s.id === state.currentStudentId);
   if (!student) { showView('students'); return; }
 
-  document.getElementById('detail-avatar').style.background = AVATAR_COLORS[student.colorIdx % AVATAR_COLORS.length];
   document.getElementById('detail-avatar').textContent = initials(student.name);
   document.getElementById('detail-name').textContent = student.name;
-
-  const lessons = lessonsForStudent(student.id);
-  document.getElementById('detail-sub').textContent = lessons.length
-    ? `${lessons.length} lesson${lessons.length > 1 ? 's' : ''} recorded`
-    : 'No lessons yet';
+  document.getElementById('detail-meta').textContent =
+    student.joinedAt ? `Joined ${formatMonthYear(student.joinedAt)}` : '';
 
   const continueCard = document.getElementById('continue-card');
   const firstBtn = document.getElementById('btn-first-lesson');
+  const base = studentNextStart(student);
 
-  if (lessons.length) {
-    const last = lessons[0];
-    const meta = surahMeta(last.surahId);
-    const next = nextAyahRef(last.surahId, last.endAyah);
-    continueCard.classList.remove('hidden');
-    firstBtn.classList.add('hidden');
-    if (next) {
-      const nextMeta = surahMeta(next.surahId);
-      document.getElementById('continue-ref').innerHTML =
-        `${nextMeta.translit} <span class="ar">${nextMeta.name}</span> · Ayah ${next.ayah}`;
-      document.getElementById('continue-desc').textContent =
-        `Last lesson ended at ${meta.translit} ${last.endAyah} on ${formatDateHuman(last.date)}`;
-      continueCard.dataset.nextSurah = next.surahId;
-      continueCard.dataset.nextAyah = next.ayah;
-    } else {
-      document.getElementById('continue-ref').textContent = 'Quran complete 🎉';
-      document.getElementById('continue-desc').textContent = 'This student has finished the entire Quran.';
-      continueCard.dataset.nextSurah = '';
-    }
-  } else {
+  if (!base) {
     continueCard.classList.add('hidden');
     firstBtn.classList.remove('hidden');
+  } else {
+    const next = nextAyahRef(base.surahId, base.ayah);
+    firstBtn.classList.add('hidden');
+    continueCard.classList.remove('hidden');
+    const last = lastLessonFor(student.id);
+
+    if (!next) {
+      document.getElementById('continue-surah').textContent = '';
+      document.getElementById('continue-ayah').textContent = '';
+      document.getElementById('continue-desc').textContent = 'Completed the Quran';
+      continueCard.dataset.nextSurah = '';
+      continueCard.dataset.nextAyah = '';
+      document.getElementById('btn-continue').classList.add('hidden');
+    } else {
+      const nextMeta = surahMeta(next.surahId);
+      document.getElementById('continue-surah').textContent = nextMeta.translit;
+      document.getElementById('continue-ayah').textContent = `${next.ayah} ?`;
+      document.getElementById('continue-desc').textContent =
+        last ? `Last lesson ended at Ayah ${base.ayah}`
+             : `Starting from ${surahMeta(base.surahId).translit} ${base.ayah}`;
+      continueCard.dataset.nextSurah = next.surahId;
+      continueCard.dataset.nextAyah = next.ayah;
+      document.getElementById('btn-continue').classList.remove('hidden');
+    }
   }
 
+  const lessons = lessonsForStudent(student.id);
   const historyList = document.getElementById('history-list');
   const historyEmpty = document.getElementById('history-empty');
   historyList.innerHTML = '';
+
   if (!lessons.length) {
     historyEmpty.classList.remove('hidden');
-  } else {
-    historyEmpty.classList.add('hidden');
-    for (const lesson of lessons) {
+    return;
+  }
+  historyEmpty.classList.add('hidden');
+
+  const groups = {};
+  const order = [];
+  for (const lesson of lessons) {
+    if (!groups[lesson.date]) { groups[lesson.date] = []; order.push(lesson.date); }
+    groups[lesson.date].push(lesson);
+  }
+
+  for (const key of order) {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'history-group';
+    groupEl.innerHTML = `<div class="history-date">${dayLabel(key)}</div>`;
+
+    for (const lesson of groups[key]) {
       const meta = surahMeta(lesson.surahId);
       const row = document.createElement('div');
       row.className = 'history-row';
+      row.setAttribute('data-lesson-id', lesson.id);
       row.innerHTML = `
-        <div class="thread-marker"><div class="knot"></div><div class="stem"></div></div>
+        <div class="history-timeline"><div class="node"></div><div class="line"></div></div>
         <div class="history-body">
           <div class="ref-line">
-            <span class="surah-name">${meta.translit}</span>
-            <span class="ayat-range">${lesson.startAyah}–${lesson.endAyah}</span>
+            <span class="surah-name">${escapeHtml(meta.translit)}</span>
+            <span class="ayat-range">${lesson.startAyah}�${lesson.endAyah}</span>
           </div>
-          <div class="date">${formatDateHuman(lesson.date)}${lesson.note ? ' · ' + escapeHtml(lesson.note) : ''}</div>
+          <div class="date">${lesson.time ? `Completed � ${escapeHtml(lesson.time)}` : 'Completed'}</div>
         </div>
         <div class="history-actions">
-          <button class="icon-btn-sm" data-action="share" data-lesson-id="${lesson.id}" aria-label="Share">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
+          <button class="icon-btn-sm" data-action="share" aria-label="Share">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
           </button>
-          <button class="icon-btn-sm" data-action="edit" data-lesson-id="${lesson.id}" aria-label="Edit">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <button class="icon-btn-sm" data-action="edit" aria-label="Edit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </button>
-          <button class="icon-btn-sm" data-action="delete" data-lesson-id="${lesson.id}" aria-label="Delete">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          <button class="icon-btn-sm" data-action="delete" aria-label="Delete">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
           </button>
         </div>
       `;
-      row.querySelector('[data-action="share"]').addEventListener('click', () => openShareSheet(lesson.id));
-      row.querySelector('[data-action="edit"]').addEventListener('click', () => editLesson(lesson.id));
-      row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteLesson(lesson.id));
-      historyList.appendChild(row);
+      row.querySelector('[data-action="share"]').addEventListener('click', (e) => { e.stopPropagation(); openShareSheet(lesson.id); });
+      row.querySelector('[data-action="edit"]').addEventListener('click', (e) => { e.stopPropagation(); editLesson(lesson.id); });
+      row.querySelector('[data-action="delete"]').addEventListener('click', (e) => { e.stopPropagation(); deleteLesson(lesson.id); });
+      row.addEventListener('click', () => openReader(lesson.surahId, lesson.startAyah));
+      groupEl.appendChild(row);
     }
+    historyList.appendChild(groupEl);
   }
 }
 
-/* ---------------------------- Reader ---------------------------- */
-
 function populateSurahSelect() {
-  const sel = document.getElementById('select-surah');
-  sel.innerHTML = state.surahIndex.map(s => `<option value="${s.id}">${s.id}. ${s.translit}</option>`).join('');
-  const manualSel = document.getElementById('manual-surah');
-  manualSel.innerHTML = state.surahIndex.map(s => `<option value="${s.id}">${s.id}. ${s.translit}</option>`).join('');
+  const optsHtml = state.surahIndex.map(s => `<option value="${s.id}">${s.id}. ${s.translit}</option>`).join('');
+  document.getElementById('select-surah').innerHTML = optsHtml;
+  document.getElementById('manual-surah').innerHTML = optsHtml;
+  document.getElementById('select-student-surah').innerHTML = optsHtml;
 }
 
 function populateAyahSelect(surahId) {
@@ -360,27 +442,32 @@ function openReader(surahId, ayah, opts) {
   showView('reader');
   document.getElementById('jump-panel').classList.add('hidden');
   document.getElementById('reader-content').classList.remove('hidden');
+  document.getElementById('btn-reader-confirm').classList.add('hidden');
+  updateSelectionBanner();
   if (ayah) {
     requestAnimationFrame(() => scrollToAyah(ayah, true));
   }
-  updateSelectionBanner();
 }
 
 function renderReaderContent(surahId) {
   const surah = surahById(surahId);
   const meta = surahMeta(surahId);
   const container = document.getElementById('reader-content');
+  container.style.transform = '';
+  container.style.transition = '';
   container.innerHTML = '';
+
+  document.getElementById('reader-surah-name').textContent = meta.translit;
 
   const heading = document.createElement('div');
   heading.className = 'surah-heading';
-  heading.innerHTML = `<div class="name-ar">${surah.name}</div><div class="name-translit">${meta.id}. ${meta.translit} · ${meta.count} ayat</div>`;
+  heading.innerHTML = `<div class="name-ar">${surah.name}</div><div class="name-translit">${meta.id}. ${meta.translit} � ${meta.count} ayat</div>`;
   container.appendChild(heading);
 
   if (surahId !== 9 && surahId !== 1) {
     const bismillah = document.createElement('div');
     bismillah.className = 'bismillah';
-    bismillah.textContent = 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ';
+    bismillah.textContent = '?????? ??????? ???????????? ??????????';
     container.appendChild(bismillah);
   }
 
@@ -406,19 +493,20 @@ function scrollToAyah(ayah, instant) {
 }
 
 function applySelectionHighlight() {
-  document.querySelectorAll('.ayah-block').forEach(b => b.classList.remove('in-lesson', 'lesson-start', 'lesson-end'));
+  document.querySelectorAll('.ayah-block').forEach(b => b.classList.remove('in-range', 'range-start', 'range-end'));
   const sel = state.selection;
-  if (!sel.active || sel.surahId !== state.readerSurahId) return;
-  const start = sel.start, end = sel.mode === 'end' ? null : null;
-  if (sel.start) {
-    const endVal = sel.end || sel.start;
-    const lo = Math.min(sel.start, endVal), hi = Math.max(sel.start, endVal);
-    for (let a = lo; a <= hi; a++) {
-      const el = document.querySelector(`.ayah-block[data-ayah="${a}"]`);
-      if (el) el.classList.add('in-lesson');
-    }
-    const startEl = document.querySelector(`.ayah-block[data-ayah="${sel.start}"]`);
-    if (startEl) startEl.classList.add('lesson-start');
+  if (!sel.active || !sel.surahId || !sel.start) return;
+  const endVal = sel.end || sel.start;
+  const lo = Math.min(sel.start, endVal), hi = Math.max(sel.start, endVal);
+  for (let a = lo; a <= hi; a++) {
+    const el = document.querySelector(`.ayah-block[data-ayah="${a}"]`);
+    if (el) el.classList.add('in-range');
+  }
+  const startEl = document.querySelector(`.ayah-block[data-ayah="${sel.start}"]`);
+  if (startEl) startEl.classList.add('range-start');
+  if (sel.end) {
+    const endEl = document.querySelector(`.ayah-block[data-ayah="${sel.end}"]`);
+    if (endEl) endEl.classList.add('range-end');
   }
 }
 
@@ -428,17 +516,14 @@ function updateSelectionBanner() {
   if (!state.selection.active) { banner.classList.add('hidden'); return; }
   banner.classList.remove('hidden');
   text.textContent = state.selection.mode === 'start'
-    ? "Tap the ayah where today's lesson starts"
-    : "Tap the ayah where today's lesson ends";
+    ? "Tap the ayah where the lesson starts"
+    : "Tap the ayah where the lesson ends";
 }
 
 function handleAyahTap(surahId, ayah, blockEl) {
   const sel = state.selection;
-  if (!sel.active) {
-    // free browsing tap — just a gentle highlight pulse, no-op otherwise
-    return;
-  }
-  if (sel.lockedSurah && surahId !== sel.surahId) {
+  if (!sel.active || sel.complete) return;
+  if (sel.lockedSurah && sel.surahId && surahId !== sel.surahId) {
     toast('Lesson range must stay within one surah');
     return;
   }
@@ -455,7 +540,6 @@ function handleAyahTap(surahId, ayah, blockEl) {
 
   if (sel.mode === 'end') {
     if (ayah < sel.start) {
-      // teacher tapped before the start — treat as redefining the start point
       sel.start = ayah;
       applySelectionHighlight();
       return;
@@ -472,32 +556,40 @@ function finishSelection() {
     surahId: sel.surahId,
     start: sel.start,
     end: sel.end,
-    lessonId: sel.editingLessonId
+    editingLessonId: sel.editingLessonId
   };
-  resetSelection();
-  openLessonConfirmSheet();
-}
-
-function resetSelection() {
-  state.selection = { active: false, mode: null, forStudentId: null, surahId: null, start: null, end: null, lockedSurah: false, editingLessonId: null };
-  document.getElementById('selecting-banner').classList.add('hidden');
+  sel.complete = true;
+  showReaderConfirm();
   applySelectionHighlight();
 }
 
-/* Start "new lesson" flow — continuing from last lesson end (start is fixed) */
+function showReaderConfirm() {
+  document.getElementById('selecting-banner').classList.add('hidden');
+  document.getElementById('btn-reader-confirm').classList.remove('hidden');
+}
+
+function resetSelection() {
+  state.selection = {
+    active: false, mode: null, forStudentId: null, surahId: null,
+    start: null, end: null, lockedSurah: false, complete: false, editingLessonId: null
+  };
+  document.getElementById('selecting-banner').classList.add('hidden');
+  document.getElementById('btn-reader-confirm').classList.add('hidden');
+  applySelectionHighlight();
+}
+
 function beginContinueLesson(studentId, surahId, ayah) {
   state.selection = {
     active: true, mode: 'end', forStudentId: studentId,
-    surahId, start: ayah, end: null, lockedSurah: true, editingLessonId: null
+    surahId, start: ayah, end: null, lockedSurah: true, complete: false, editingLessonId: null
   };
   openReader(surahId, ayah);
 }
 
-/* Start "first lesson" flow — teacher picks both start and end */
 function beginFreshLesson(studentId) {
   state.selection = {
     active: true, mode: 'start', forStudentId: studentId,
-    surahId: null, start: null, end: null, lockedSurah: false, editingLessonId: null
+    surahId: null, start: null, end: null, lockedSurah: false, complete: false, editingLessonId: null
   };
   openReader(state.readerSurahId || 1, 1);
 }
@@ -506,34 +598,44 @@ function beginFreshLesson(studentId) {
 
 function openLessonConfirmSheet() {
   const pl = state.pendingLesson;
+  if (!pl) return;
   const student = state.students.find(s => s.id === pl.studentId);
   const meta = surahMeta(pl.surahId);
+  if (!student) return;
 
   document.getElementById('lesson-student-name').textContent = `For ${student.name}`;
-  document.getElementById('lesson-range-surah').innerHTML = `${meta.translit} <span style="font-family:var(--font-arabic);font-size:15px">${meta.name}</span>`;
-  document.getElementById('lesson-range-ayat').textContent = `Ayah ${pl.start}–${pl.end}`;
-  document.getElementById('input-lesson-date').value = todayIso();
+  document.getElementById('lesson-range-text').textContent = `${meta.translit} � ${pl.start}�${pl.end}`;
   document.getElementById('input-lesson-note').value = '';
   openSheet('sheet-lesson');
 }
 
 async function saveLessonFromSheet() {
   const pl = state.pendingLesson;
-  const date = document.getElementById('input-lesson-date').value || todayIso();
+  if (!pl) return;
+  const student = state.students.find(s => s.id === pl.studentId);
+  if (!student) return;
   const note = document.getElementById('input-lesson-note').value.trim();
+  const time = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   const lesson = {
-    id: pl.lessonId || uid(),
+    id: pl.editingLessonId || uid(),
     studentId: pl.studentId,
     surahId: pl.surahId,
     startAyah: pl.start,
     endAyah: pl.end,
-    date,
+    date: todayIso(),
+    time,
     note,
-    createdAt: pl.lessonId
-      ? (state.lessons.find(l => l.id === pl.lessonId) || {}).createdAt || new Date().toISOString()
+    createdAt: pl.editingLessonId
+      ? (state.lessons.find(l => l.id === pl.editingLessonId) || {}).createdAt || new Date().toISOString()
       : new Date().toISOString()
   };
+
+  if (!pl.editingLessonId) {
+    student.surahId = pl.surahId;
+    student.ayah = pl.end;
+    await dbPut('students', student);
+  }
 
   await dbPut('lessons', lesson);
   const idx = state.lessons.findIndex(l => l.id === lesson.id);
@@ -545,28 +647,28 @@ async function saveLessonFromSheet() {
   renderStudents();
   renderStudentDetail();
   showView('detail');
-  toast('Lesson saved');
+  toast('Sabaq recorded');
 }
 
 function editLesson(lessonId) {
   const lesson = state.lessons.find(l => l.id === lessonId);
   if (!lesson) return;
+  const student = state.students.find(s => s.id === lesson.studentId);
   state.pendingLesson = {
     studentId: lesson.studentId, surahId: lesson.surahId,
-    start: lesson.startAyah, end: lesson.endAyah, lessonId: lesson.id
+    start: lesson.startAyah, end: lesson.endAyah, editingLessonId: lesson.id
   };
   document.getElementById('lesson-student-name').textContent =
-    `For ${state.students.find(s => s.id === lesson.studentId).name}`;
+    `For ${student ? student.name : ''}`;
   const meta = surahMeta(lesson.surahId);
-  document.getElementById('lesson-range-surah').innerHTML = `${meta.translit} <span style="font-family:var(--font-arabic);font-size:15px">${meta.name}</span>`;
-  document.getElementById('lesson-range-ayat').textContent = `Ayah ${lesson.startAyah}–${lesson.endAyah}`;
-  document.getElementById('input-lesson-date').value = lesson.date;
+  document.getElementById('lesson-range-text').textContent =
+    `${meta.translit} � ${lesson.startAyah}�${lesson.endAyah}`;
   document.getElementById('input-lesson-note').value = lesson.note || '';
   openSheet('sheet-lesson');
 }
 
 async function deleteLesson(lessonId) {
-  if (!confirm('Delete this lesson entry?')) return;
+  if (!await confirmDialog({ title: 'Delete lesson', message: 'Delete this lesson entry?', confirmText: 'Delete', danger: true })) return;
   await dbDelete('lessons', lessonId);
   state.lessons = state.lessons.filter(l => l.id !== lessonId);
   renderStudents();
@@ -574,9 +676,9 @@ async function deleteLesson(lessonId) {
   toast('Lesson deleted');
 }
 
-/* Manual range entry (edit icon inside the confirm sheet) */
 function openManualRangeSheet() {
   const pl = state.pendingLesson;
+  if (!pl) return;
   document.getElementById('manual-surah').value = String(pl.surahId);
   document.getElementById('manual-start').value = pl.start;
   document.getElementById('manual-end').value = pl.end;
@@ -584,6 +686,8 @@ function openManualRangeSheet() {
 }
 
 function applyManualRange() {
+  const pl = state.pendingLesson;
+  if (!pl) return;
   const surahId = parseInt(document.getElementById('manual-surah').value, 10);
   const meta = surahMeta(surahId);
   let start = parseInt(document.getElementById('manual-start').value, 10);
@@ -593,13 +697,11 @@ function applyManualRange() {
   end = Math.max(1, Math.min(end, meta.count));
   if (end < start) { const t = start; start = end; end = t; }
 
-  state.pendingLesson.surahId = surahId;
-  state.pendingLesson.start = start;
-  state.pendingLesson.end = end;
+  pl.surahId = surahId;
+  pl.start = start;
+  pl.end = end;
 
-  document.getElementById('lesson-range-surah').innerHTML = `${meta.translit} <span style="font-family:var(--font-arabic);font-size:15px">${meta.name}</span>`;
-  document.getElementById('lesson-range-ayat').textContent = `Ayah ${start}–${end}`;
-
+  document.getElementById('lesson-range-text').textContent = `${meta.translit} � ${start}�${end}`;
   closeSheet('sheet-manual-range');
 }
 
@@ -640,13 +742,13 @@ function openReaderSurahOnly(surahId) {
   renderReaderContent(surahId);
 }
 
-/* ---------------------------- Share card (canvas) ---------------------------- */
+/* ---------------------------- Share card (canvas) � minimalist ---------------------------- */
 
 async function ensureFontsReady() {
   const specs = [
-    '900 64px Fraunces', '700 40px Fraunces', '600 30px Fraunces',
-    '400 60px "Amiri Quran"',
-    '600 26px Inter', '700 26px Inter', '500 22px Inter', '400 22px Inter'
+    '700 30px Inter', '500 26px Inter', '600 22px Inter', '500 22px Inter',
+    '700 76px Inter', '400 96px "Amiri Quran"', '700 120px Inter',
+    'italic 400 26px Inter', '400 22px Inter'
   ];
   await Promise.all(specs.map(s => document.fonts.load(s).catch(() => {})));
   await document.fonts.ready;
@@ -673,181 +775,93 @@ async function drawShareCard(lesson) {
   const canvas = document.getElementById('share-canvas');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
-  const brand = AVATAR_COLORS[state.settings.brandColorIdx % AVATAR_COLORS.length];
+  const brand = BRAND_COLORS[state.settings.brandColorIdx % BRAND_COLORS.length];
 
   await ensureFontsReady();
 
-  // Background
-  const grad = ctx.createLinearGradient(0, 0, W, H);
-  grad.addColorStop(0, shadeColor(brand, -8));
-  grad.addColorStop(1, shadeColor(brand, 14));
-  ctx.fillStyle = grad;
+  ctx.fillStyle = '#F7F9F8';
   ctx.fillRect(0, 0, W, H);
 
-  // Inset border frame
-  ctx.strokeStyle = 'rgba(246,239,224,0.28)';
+  ctx.fillStyle = brand;
+  ctx.fillRect(72, 120, 6, H - 240);
+
+  ctx.strokeStyle = '#E7EBE9';
   ctx.lineWidth = 2;
-  roundRect(ctx, 44, 44, W - 88, H - 88, 28);
+  roundRect(ctx, 48, 48, W - 96, H - 96, 28);
   ctx.stroke();
 
-  // Corner flourish (quarter arcs, subtle)
-  drawCornerFlourish(ctx, 44, 44, 1, 1);
-  drawCornerFlourish(ctx, W - 44, 44, -1, 1);
-  drawCornerFlourish(ctx, 44, H - 44, 1, -1);
-  drawCornerFlourish(ctx, W - 44, H - 44, -1, -1);
-
-  const cx = W / 2;
   const student = state.students.find(s => s.id === lesson.studentId);
   const meta = surahMeta(lesson.surahId);
   const school = state.settings.schoolName || 'Sabaq';
+  const cx = W / 2;
 
-  // Pre-measure the student name wrap so we can center the whole block vertically
-  ctx.font = '900 68px Fraunces';
-  const nameLines = wrapCanvasText(ctx, student ? student.name : 'Student', W - 200);
-  const hasLogo = !!state.settings.logoDataUrl;
-
-  let blockHeight = (hasLogo ? 76 : 0) + 56 + 64 + nameLines.length * 74 + 14 + 60 + 66 + 76 + 76 + 96;
-  let y = Math.max(150, (H - blockHeight) / 2 - 40);
-
-  // Logo + school name
-  if (hasLogo) {
-    try {
-      const img = await loadImage(state.settings.logoDataUrl);
-      const size = 84;
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, y, size / 2, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(img, cx - size / 2, y - size / 2, size, size);
-      ctx.restore();
-      ctx.strokeStyle = 'rgba(246,239,224,0.5)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, y, size / 2, 0, Math.PI * 2);
-      ctx.stroke();
-      y += 76;
-    } catch (e) { /* ignore broken logo */ }
+  let y = 150;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#17201D';
+  ctx.font = '700 30px Inter';
+  ctx.letterSpacing = '2px';
+  ctx.fillText('Sabaq', 56, y);
+  ctx.letterSpacing = '0px';
+  if (school && school !== 'Sabaq') {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#6B7470';
+    ctx.font = '500 26px Inter';
+    ctx.fillText(school, W - 56, y);
+    ctx.textAlign = 'left';
   }
 
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#F6EFE0';
-  ctx.font = '600 26px Inter';
-  ctx.fillText(school, cx, y);
-  y += 56;
-
-  // Eyebrow
-  ctx.fillStyle = '#E4D3A0';
-  ctx.font = '700 22px Inter';
-  ctx.save();
+  ctx.fillStyle = '#6B7470';
+  ctx.font = '600 22px Inter';
   ctx.letterSpacing = '4px';
-  ctx.fillText("TODAY'S LESSON", cx, y);
-  ctx.restore();
-  y += 64;
+  ctx.fillText('LESSON', cx, 240);
+  ctx.letterSpacing = '0px';
 
-  // Student name (wraps)
-  ctx.fillStyle = '#FFFDF6';
-  ctx.font = '900 68px Fraunces';
-  for (const line of nameLines) { ctx.fillText(line, cx, y); y += 74; }
-  y += 14;
+  ctx.fillStyle = '#17201D';
+  ctx.font = '700 76px Inter';
+  const nameLines = wrapCanvasText(ctx, student ? student.name : 'Student', W - 160);
+  y = 330;
+  for (const line of nameLines.slice(0, 2)) { ctx.fillText(line, cx, y); y += 86; }
+  y += 30;
 
-  // Thread divider
-  drawThreadDivider(ctx, cx, y, 240);
-  y += 60;
+  ctx.font = '400 96px "Amiri Quran"';
+  ctx.fillText(meta.name, cx, y);
+  y += 110;
 
-  // Surah name (arabic) + transliteration
-  ctx.fillStyle = '#F6EFE0';
-  ctx.font = '400 64px "Amiri Quran"';
-  ctx.fillText(meta.name, cx, y + 10);
-  y += 66;
-  ctx.fillStyle = 'rgba(246,239,224,0.72)';
-  ctx.font = '500 24px Inter';
-  ctx.save();
-  ctx.letterSpacing = '2px';
-  ctx.fillText(`SURAH ${meta.id} · ${meta.translit.toUpperCase()}`, cx, y);
-  ctx.restore();
-  y += 76;
-
-  // Ayah range big numbers
-  ctx.fillStyle = '#E4D3A0';
-  ctx.font = '700 20px Inter';
-  ctx.save();
-  ctx.letterSpacing = '3px';
-  ctx.fillText('AYAH', cx, y);
-  ctx.restore();
-  y += 78;
-  ctx.fillStyle = '#FFFDF6';
-  ctx.font = '700 100px Fraunces';
-  ctx.fillText(`${lesson.startAyah}–${lesson.endAyah}`, cx, y);
-  y += 56;
-
-  // Note, if present, sits just under the ayah range
-  if (lesson.note) {
-    ctx.fillStyle = 'rgba(246,239,224,0.6)';
-    ctx.font = 'italic 400 22px Inter';
-    const noteLines = wrapCanvasText(ctx, '“' + lesson.note + '”', W - 280);
-    for (const line of noteLines.slice(0, 2)) { ctx.fillText(line, cx, y); y += 32; }
-  }
-
-  // Decorative stitched thread running the width of the card — the app's signature motif
-  drawStitchedThread(ctx, cx, H - 220, W - 200);
-
-  // Footer: date + wordmark
-  ctx.fillStyle = 'rgba(246,239,224,0.65)';
+  ctx.fillStyle = '#6B7470';
   ctx.font = '500 22px Inter';
-  ctx.fillText(formatDateHuman(lesson.date), cx, H - 150);
+  ctx.letterSpacing = '2px';
+  ctx.fillText(`SURAH ${meta.id} � ${meta.translit.toUpperCase()}`, cx, y);
+  ctx.letterSpacing = '0px';
+  y += 90;
 
-  ctx.fillStyle = 'rgba(246,239,224,0.4)';
-  ctx.font = '700 18px Inter';
-  ctx.save();
-  ctx.letterSpacing = '3px';
-  ctx.fillText('SABAQ', cx, H - 90);
-  ctx.restore();
-}
-
-function drawStitchedThread(ctx, cx, y, width) {
-  const left = cx - width / 2, right = cx + width / 2;
-  ctx.strokeStyle = 'rgba(176,141,43,0.45)';
+  ctx.strokeStyle = '#E7EBE9';
   ctx.lineWidth = 2;
-  ctx.setLineDash([2, 14]);
-  ctx.beginPath();
-  ctx.moveTo(left, y);
-  ctx.lineTo(right, y);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  // three knots along the thread — start, a lesson-in-progress, and today
-  [0.18, 0.5, 0.82].forEach((t, i) => {
-    const x = left + width * t;
-    ctx.fillStyle = i === 2 ? '#B08D2B' : 'rgba(176,141,43,0.5)';
-    ctx.beginPath();
-    ctx.arc(x, y, i === 2 ? 6 : 4, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
+  ctx.beginPath(); ctx.moveTo(cx - 220, y); ctx.lineTo(cx + 220, y); ctx.stroke();
+  y += 90;
 
-function drawThreadDivider(ctx, cx, y, width) {
-  ctx.strokeStyle = '#B08D2B';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(cx - width / 2, y);
-  ctx.lineTo(cx - 14, y);
-  ctx.moveTo(cx + 14, y);
-  ctx.lineTo(cx + width / 2, y);
-  ctx.stroke();
-  ctx.fillStyle = '#B08D2B';
-  ctx.beginPath();
-  ctx.arc(cx, y, 7, 0, Math.PI * 2);
-  ctx.fill();
-}
+  ctx.fillStyle = brand;
+  ctx.font = '700 120px Inter';
+  ctx.fillText(`${lesson.startAyah} � ${lesson.endAyah}`, cx, y + 20);
+  y += 170;
 
-function drawCornerFlourish(ctx, x, y, dx, dy) {
-  ctx.strokeStyle = 'rgba(176,141,43,0.55)';
-  ctx.lineWidth = 2;
-  for (let r = 16; r <= 40; r += 12) {
-    ctx.beginPath();
-    ctx.arc(x + dx * 4, y + dy * 4, r, Math.PI + (dx < 0 ? Math.PI / 2 : 0) * 0, Math.PI * 2, false);
-    ctx.stroke();
+  ctx.strokeStyle = '#E7EBE9';
+  ctx.beginPath(); ctx.moveTo(cx - 220, y); ctx.lineTo(cx + 220, y); ctx.stroke();
+  y += 70;
+
+  if (lesson.note) {
+    ctx.fillStyle = '#6B7470';
+    ctx.font = 'italic 400 26px Inter';
+    const noteLines = wrapCanvasText(ctx, lesson.note, W - 220);
+    for (const line of noteLines.slice(0, 2)) { ctx.fillText(line, cx, y); y += 36; }
+    y += 30;
   }
+
+  ctx.fillStyle = '#6B7470';
+  ctx.font = '500 22px Inter';
+  ctx.fillText(`Sabaq recorded � ${formatDateHuman(lesson.date)}`, cx, H - 90);
+
+  ctx.textAlign = 'left';
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -858,17 +872,6 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
-}
-
-function shadeColor(hex, percent) {
-  const num = parseInt(hex.slice(1), 16);
-  let r = (num >> 16) + Math.round(255 * (percent / 100));
-  let g = ((num >> 8) & 0x00FF) + Math.round(255 * (percent / 100));
-  let b = (num & 0x0000FF) + Math.round(255 * (percent / 100));
-  r = Math.max(0, Math.min(255, r));
-  g = Math.max(0, Math.min(255, g));
-  b = Math.max(0, Math.min(255, b));
-  return `rgb(${r},${g},${b})`;
 }
 
 function loadImage(src) {
@@ -885,7 +888,8 @@ async function openShareSheet(lessonId) {
   if (!lesson) return;
   state.shareLessonId = lessonId;
   const student = state.students.find(s => s.id === lesson.studentId);
-  document.getElementById('share-sub').textContent = `For ${student ? student.name : ''} · ${formatDateHuman(lesson.date)}`;
+  document.getElementById('share-sub').textContent =
+    `For ${student ? student.name : ''} � ${formatDateHuman(lesson.date)}`;
   openSheet('sheet-share');
   await drawShareCard(lesson);
 }
@@ -926,14 +930,143 @@ async function shareCardWhatsapp() {
       return;
     } catch (e) {
       if (e && e.name === 'AbortError') return;
-      // fall through to fallback below
     }
   }
-  // Fallback: save the image, then open WhatsApp with the text pre-filled
   await shareCardDownload();
-  toast('Image saved — attach it in WhatsApp');
+  toast('Image saved � attach it in WhatsApp');
   const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
   window.open(waUrl, '_blank');
+}
+
+/* ---------------------------- Touch gestures ---------------------------- */
+
+function attachDrag(el, opts) {
+  let active = false, axis = null, startX = 0, startY = 0, curX = 0, curY = 0, dragged = false;
+  el.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { active = false; return; }
+    const t = e.touches[0];
+    startX = curX = t.clientX; startY = curY = t.clientY;
+    active = true; axis = null; dragged = false;
+    if (opts.onStart) opts.onStart(t, e);
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    if (!active) return;
+    const t = e.touches[0];
+    curX = t.clientX; curY = t.clientY;
+    const dx = curX - startX, dy = curY - startY;
+    if (axis === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      dragged = true;
+      if (opts.axis && opts.axis !== 'auto' && opts.axis !== axis) { active = false; return; }
+    }
+    if (axis === 'x') { if (e.cancelable) e.preventDefault(); }
+    if (axis === 'x') { if (opts.onMoveX) opts.onMoveX(dx, dy, t, e); }
+    else { if (opts.onMoveY) opts.onMoveY(dx, dy, t, e); }
+  }, { passive: false });
+  function finish(e) {
+    if (!active) return;
+    active = false;
+    const dx = curX - startX, dy = curY - startY;
+    if (axis === 'x') { if (opts.onEndX) opts.onEndX(dx, dy, e); }
+    else if (axis === 'y') { if (opts.onEndY) opts.onEndY(dx, dy, e); }
+    else { if (opts.onTap) opts.onTap(e); }
+  }
+  el.addEventListener('touchend', finish);
+  el.addEventListener('touchcancel', () => { active = false; if (opts.onCancel) opts.onCancel(); });
+  el.addEventListener('click', (e) => {
+    if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; }
+  }, true);
+}
+
+function attachSheetDismiss(overlay) {
+  const sheet = overlay.querySelector('.sheet');
+  if (!sheet) return;
+  attachDrag(overlay, {
+    onMoveY(dx, dy) {
+      if (dy <= 0) { sheet.style.transform = 'translateY(0)'; return; }
+      if (sheet.scrollHeight > sheet.clientHeight && sheet.scrollTop > 0) return;
+      sheet.style.transition = 'none';
+      sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
+    },
+    onEndY(dx, dy) {
+      sheet.style.transition = '';
+      const h = sheet.offsetHeight;
+      if (dy > Math.min(130, h * 0.4)) {
+        sheet.style.transform = `translateY(${h}px)`;
+        setTimeout(() => { overlay.classList.add('hidden'); sheet.style.transform = ''; }, 220);
+      } else {
+        sheet.style.transform = '';
+      }
+    }
+  });
+}
+
+function goToSurah(id) {
+  if (id < 1 || id > 114) return;
+  if (state.selection.active) return;
+  const content = document.getElementById('reader-content');
+  content.style.transform = '';
+  openReaderSurahOnly(id);
+}
+
+function attachReaderSwipe() {
+  const content = document.getElementById('reader-content');
+  let ignore = false;
+  attachDrag(content, {
+    onStart(t) { ignore = t.clientX < 30; },
+    onMoveX(dx) {
+      if (ignore || state.selection.active) return;
+      if (!document.getElementById('jump-panel').classList.contains('hidden')) return;
+      content.style.transition = 'none';
+      content.style.transform = `translateX(${dx * 0.35}px)`;
+    },
+    onEndX(dx) {
+      if (ignore) return;
+      content.style.transition = 'transform .25s ease';
+      const w = content.offsetWidth || window.innerWidth;
+      const threshold = Math.min(90, w * 0.25);
+      if (dx < -threshold) goToSurah(state.readerSurahId + 1);
+      else if (dx > threshold) goToSurah(state.readerSurahId - 1);
+      else content.style.transform = '';
+      setTimeout(() => { content.style.transform = ''; content.style.transition = ''; }, 280);
+    }
+  });
+}
+
+function attachEdgeBack(viewId, onBack) {
+  const view = document.getElementById(viewId);
+  let armed = false;
+  attachDrag(view, {
+    onStart(t) {
+      if (state.selection.active) { armed = false; return; }
+      if (t.clientX > 24 || t.clientY < 84) { armed = false; return; }
+      armed = true;
+      view.classList.add('edge-drag');
+      view.style.transition = 'none';
+    },
+    onMoveX(dx) {
+      if (!armed) return;
+      view.style.transform = `translateX(${Math.max(0, dx)}px)`;
+    },
+    onEndX(dx) {
+      if (!armed) return;
+      view.style.transition = 'transform .25s ease';
+      view.style.transform = '';
+      view.classList.remove('edge-drag');
+      armed = false;
+      if (dx > 80) onBack();
+    },
+    onEndY() { if (armed) { armed = false; view.style.transition = ''; view.style.transform = ''; view.classList.remove('edge-drag'); } },
+    onCancel() { armed = false; view.style.transition = ''; view.style.transform = ''; view.classList.remove('edge-drag'); }
+  });
+}
+
+function detailBack() { showView('students'); }
+
+function readerBack() {
+  if (state.selection.active) resetSelection();
+  showView(state.currentStudentId ? 'detail' : 'students');
 }
 
 /* ---------------------------- Add / edit student ---------------------------- */
@@ -944,7 +1077,9 @@ function openAddStudentSheet() {
   editingStudentId = null;
   document.getElementById('student-sheet-title').textContent = 'Add student';
   document.getElementById('input-student-name').value = '';
-  renderColorRow('student-color-row', 0);
+  document.getElementById('input-student-phone').value = '';
+  document.getElementById('select-student-surah').value = '1';
+  document.getElementById('input-student-ayah').value = '';
   openSheet('sheet-student');
   setTimeout(() => document.getElementById('input-student-name').focus(), 200);
 }
@@ -953,35 +1088,35 @@ function openEditStudentSheet(student) {
   editingStudentId = student.id;
   document.getElementById('student-sheet-title').textContent = 'Edit student';
   document.getElementById('input-student-name').value = student.name;
-  renderColorRow('student-color-row', student.colorIdx);
+  document.getElementById('input-student-phone').value = student.phone || '';
+  document.getElementById('select-student-surah').value = String(student.surahId || 1);
+  document.getElementById('input-student-ayah').value = student.ayah || '';
   openSheet('sheet-student');
-}
-
-function renderColorRow(containerId, selectedIdx) {
-  const row = document.getElementById(containerId);
-  row.innerHTML = AVATAR_COLORS.map((c, i) => `<div class="color-dot ${i === selectedIdx ? 'selected' : ''}" data-idx="${i}" style="background:${c}"></div>`).join('');
-  row.dataset.selected = selectedIdx;
-  row.querySelectorAll('.color-dot').forEach(dot => {
-    dot.addEventListener('click', () => {
-      row.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
-      dot.classList.add('selected');
-      row.dataset.selected = dot.dataset.idx;
-    });
-  });
 }
 
 async function saveStudentFromSheet() {
   const name = document.getElementById('input-student-name').value.trim();
   if (!name) { toast('Enter a name'); return; }
-  const colorIdx = parseInt(document.getElementById('student-color-row').dataset.selected || '0', 10);
+  const phone = document.getElementById('input-student-phone').value.trim();
+  const surahIdRaw = document.getElementById('select-student-surah').value;
+  const surahId = surahIdRaw ? parseInt(surahIdRaw, 10) : null;
+  const ayahRaw = document.getElementById('input-student-ayah').value.trim();
+  const ayah = ayahRaw ? parseInt(ayahRaw, 10) : null;
 
   if (editingStudentId) {
     const student = state.students.find(s => s.id === editingStudentId);
     student.name = name;
-    student.colorIdx = colorIdx;
+    student.phone = phone;
+    student.surahId = surahId;
+    student.ayah = ayah;
     await dbPut('students', student);
   } else {
-    const student = { id: uid(), name, colorIdx, createdAt: new Date().toISOString() };
+    const student = {
+      id: uid(), name, phone,
+      surahId, ayah,
+      joinedAt: todayIso(),
+      createdAt: new Date().toISOString()
+    };
     await dbPut('students', student);
     state.students.push(student);
   }
@@ -992,9 +1127,10 @@ async function saveStudentFromSheet() {
   toast('Saved');
 }
 
-async function deleteCurrentStudent() {
-  if (!confirm('Delete this student and all their lesson history? This cannot be undone.')) return;
-  const id = state.currentStudentId;
+async function deleteStudentById(id) {
+  const student = state.students.find(s => s.id === id);
+  if (!student) return;
+  if (!await confirmDialog({ title: 'Delete student', message: `Delete ${student.name} and all their lesson history? This cannot be undone.`, confirmText: 'Delete', danger: true })) return;
   await dbDelete('students', id);
   const toDelete = state.lessons.filter(l => l.studentId === id);
   for (const l of toDelete) await dbDelete('lessons', l.id);
@@ -1004,6 +1140,10 @@ async function deleteCurrentStudent() {
   showView('students');
   renderStudents();
   toast('Student deleted');
+}
+
+async function deleteCurrentStudent() {
+  await deleteStudentById(state.currentStudentId);
 }
 
 /* ---------------------------- Settings ---------------------------- */
@@ -1016,10 +1156,21 @@ function renderSettingsView() {
   } else {
     preview.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" width="22" height="22"><path d="M21 15V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9"/><path d="M3 15l4.5-4.5a2 2 0 0 1 2.83 0L15 15"/><path d="M14 14l1.5-1.5a2 2 0 0 1 2.83 0L21 15"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>`;
   }
-  renderColorRow('brand-color-row', state.settings.brandColorIdx || 0);
-  // brand row selection should persist live to settings on click
-  document.querySelectorAll('#brand-color-row .color-dot').forEach(dot => {
-    dot.addEventListener('click', () => { saveSettingsField('brandColorIdx', parseInt(dot.dataset.idx, 10)); });
+  renderBrandColorRow();
+}
+
+function renderBrandColorRow() {
+  const row = document.getElementById('brand-color-row');
+  const selected = state.settings.brandColorIdx || 0;
+  row.innerHTML = BRAND_COLORS.map((c, i) =>
+    `<div class="color-dot ${i === selected ? 'selected' : ''}" data-idx="${i}" style="background:${c}"></div>`
+  ).join('');
+  row.querySelectorAll('.color-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      row.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
+      dot.classList.add('selected');
+      saveSettingsField('brandColorIdx', parseInt(dot.dataset.idx, 10));
+    });
   });
 }
 
@@ -1032,7 +1183,6 @@ async function handleLogoUpload(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = async () => {
-    // downscale to keep storage small
     const img = await loadImage(reader.result);
     const size = 240;
     const c = document.createElement('canvas');
@@ -1075,7 +1225,7 @@ async function importBackup(file) {
     const text = await file.text();
     const payload = JSON.parse(text);
     if (!payload.students || !payload.lessons) throw new Error('Invalid file');
-    if (!confirm(`Import ${payload.students.length} student(s) and ${payload.lessons.length} lesson(s)? This merges with existing data.`)) return;
+    if (!await confirmDialog({ title: 'Import backup', message: `Import ${payload.students.length} student(s) and ${payload.lessons.length} lesson(s)? This merges with existing data.`, confirmText: 'Import' })) return;
     for (const s of payload.students) await dbPut('students', s);
     for (const l of payload.lessons) await dbPut('lessons', l);
     if (payload.settings) { state.settings = Object.assign(state.settings, payload.settings); await dbPut('settings', { key: 'app', value: state.settings }); }
@@ -1091,49 +1241,46 @@ async function importBackup(file) {
 /* ---------------------------- Event wiring ---------------------------- */
 
 function wireEvents() {
-  // bottom nav
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       resetSelection();
       if (btn.dataset.tab === 'students') showView('students');
-      if (btn.dataset.tab === 'reader') openReader(state.readerSurahId || 1, null);
+      else if (btn.dataset.tab === 'reader') openReader(state.readerSurahId || 1, null);
+      else if (btn.dataset.tab === 'settings') { renderSettingsView(); showView('settings'); }
     });
   });
 
-  // students view
   document.getElementById('btn-add-student').addEventListener('click', openAddStudentSheet);
   document.getElementById('btn-open-settings').addEventListener('click', () => { renderSettingsView(); showView('settings'); });
+  document.getElementById('input-search-students').addEventListener('input', (e) => {
+    e.stopPropagation();
+    renderStudents();
+  });
 
-  // student sheet
   document.getElementById('btn-student-cancel').addEventListener('click', () => closeSheet('sheet-student'));
   document.getElementById('btn-student-save').addEventListener('click', saveStudentFromSheet);
 
-  // detail view
-  document.getElementById('btn-detail-back').addEventListener('click', () => showView('students'));
+  document.getElementById('btn-detail-back').addEventListener('click', detailBack);
   document.getElementById('btn-detail-menu').addEventListener('click', () => openSheet('sheet-student-options'));
   document.getElementById('btn-edit-student').addEventListener('click', () => {
     closeSheet('sheet-student-options');
     const student = state.students.find(s => s.id === state.currentStudentId);
-    openEditStudentSheet(student);
+    if (student) openEditStudentSheet(student);
   });
   document.getElementById('btn-delete-student').addEventListener('click', deleteCurrentStudent);
 
-  document.getElementById('btn-new-lesson').addEventListener('click', () => {
+  document.getElementById('btn-continue').addEventListener('click', () => {
     const card = document.getElementById('continue-card');
     const surahId = parseInt(card.dataset.nextSurah, 10);
     const ayah = parseInt(card.dataset.nextAyah, 10);
-    if (!surahId) { toast('This student has completed the Quran'); return; }
+    if (!surahId || isNaN(surahId)) { toast('This student has completed the Quran'); return; }
     beginContinueLesson(state.currentStudentId, surahId, ayah);
   });
   document.getElementById('btn-first-lesson').addEventListener('click', () => {
     beginFreshLesson(state.currentStudentId);
   });
 
-  // reader view
-  document.getElementById('btn-reader-back').addEventListener('click', () => {
-    if (state.selection.active) { resetSelection(); }
-    showView(state.currentStudentId ? 'detail' : 'students');
-  });
+  document.getElementById('btn-reader-back').addEventListener('click', readerBack);
   document.getElementById('select-surah').addEventListener('change', (e) => {
     const id = parseInt(e.target.value, 10);
     if (state.selection.active && state.selection.lockedSurah && id !== state.selection.surahId) {
@@ -1156,25 +1303,23 @@ function wireEvents() {
   });
   document.getElementById('jump-search-input').addEventListener('input', (e) => renderJumpList(e.target.value));
   document.getElementById('btn-cancel-select').addEventListener('click', () => {
+    const hadStudent = !!state.currentStudentId;
     resetSelection();
-    showView(state.currentStudentId ? 'detail' : 'students');
+    showView(hadStudent ? 'detail' : 'students');
   });
+  document.getElementById('btn-reader-confirm').addEventListener('click', openLessonConfirmSheet);
 
-  // lesson confirm sheet
   document.getElementById('btn-lesson-cancel').addEventListener('click', () => { closeSheet('sheet-lesson'); state.pendingLesson = null; });
   document.getElementById('btn-lesson-save').addEventListener('click', saveLessonFromSheet);
   document.getElementById('btn-edit-range').addEventListener('click', openManualRangeSheet);
 
-  // manual range sheet
   document.getElementById('btn-manual-cancel').addEventListener('click', () => closeSheet('sheet-manual-range'));
   document.getElementById('btn-manual-apply').addEventListener('click', applyManualRange);
 
-  // share sheet
   document.getElementById('btn-share-download').addEventListener('click', shareCardDownload);
   document.getElementById('btn-share-whatsapp').addEventListener('click', shareCardWhatsapp);
   document.getElementById('sheet-share').addEventListener('click', (e) => { if (e.target.id === 'sheet-share') closeSheet('sheet-share'); });
 
-  // settings view
   document.getElementById('btn-settings-back').addEventListener('click', () => showView('students'));
   document.getElementById('btn-upload-logo').addEventListener('click', () => document.getElementById('input-logo').click());
   document.getElementById('input-logo').addEventListener('change', (e) => handleLogoUpload(e.target.files[0]));
@@ -1183,9 +1328,14 @@ function wireEvents() {
   document.getElementById('btn-import-data').addEventListener('click', () => document.getElementById('input-import').click());
   document.getElementById('input-import').addEventListener('change', (e) => importBackup(e.target.files[0]));
 
-  // dismiss sheets on backdrop click
   document.querySelectorAll('.sheet-overlay').forEach(ov => {
     ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.add('hidden'); });
+  });
+
+  document.getElementById('btn-confirm-ok').addEventListener('click', () => _closeConfirm(true));
+  document.getElementById('btn-confirm-cancel').addEventListener('click', () => _closeConfirm(false));
+  document.getElementById('sheet-confirm').addEventListener('click', (e) => {
+    if (e.target.id === 'sheet-confirm') _closeConfirm(false);
   });
 }
 
@@ -1193,6 +1343,10 @@ function wireEvents() {
 
 async function init() {
   wireEvents();
+  document.querySelectorAll('.sheet-overlay').forEach(attachSheetDismiss);
+  attachReaderSwipe();
+  attachEdgeBack('view-detail', detailBack);
+  attachEdgeBack('view-reader', readerBack);
   await loadQuranData();
   populateSurahSelect();
   await loadAppData();
@@ -1204,3 +1358,5 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+
