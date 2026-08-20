@@ -395,7 +395,8 @@ main.view {
 /* ============ Sheets ============ */
 .sheet-overlay {
   position: fixed; inset: 0; background: rgba(23,32,29,0.4);
-  z-index: 50; display: flex; align-items: flex-end; justify-content: center;
+  z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+  touch-action: none; overscroll-behavior: contain;
 }
 .sheet-overlay.center { align-items: center; padding: 20px; }
 .sheet {
@@ -405,6 +406,7 @@ main.view {
   max-height: 90vh; overflow-y: auto;
   transition: transform 0.2s ease;
   will-change: transform;
+  touch-action: pan-y; overscroll-behavior: contain;
 }
 .sheet-overlay.center .sheet { border-radius: var(--radius-sheet); max-height: 85vh; }
 .sheet-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 8px auto 16px; }
@@ -459,7 +461,7 @@ main.view {
   transform: translateX(-50%);
   background: var(--text); color: #fff;
   padding: 11px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
-  box-shadow: var(--shadow-sm); z-index: 60; white-space: nowrap;
+  box-shadow: var(--shadow-sm); z-index: 200; white-space: nowrap;
   display: flex; align-items: center; gap: 8px; max-width: calc(100% - 40px);
 }
 

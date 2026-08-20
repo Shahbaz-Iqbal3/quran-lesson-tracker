@@ -198,13 +198,13 @@ function confirmDialog(opts) {
   document.getElementById('btn-confirm-cancel').textContent = opts.cancelText || 'Cancel';
   return new Promise((resolve) => {
     _confirmResolve = resolve;
-    overlay.classList.remove('hidden');
+    openSheet('sheet-confirm');
   });
 }
 
 function _closeConfirm(result) {
   const overlay = document.getElementById('sheet-confirm');
-  overlay.classList.add('hidden');
+  closeSheet('sheet-confirm');
   if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
 }
 
@@ -261,13 +261,41 @@ function showView(name) {
   window.scrollTo(0, 0);
 }
 
+let _scrollLockY = 0;
+function lockBackgroundScroll() {
+  if (document.body.dataset.scrollLocked) return;
+  _scrollLockY = window.scrollY || document.documentElement.scrollTop || 0;
+  document.body.dataset.scrollLocked = '1';
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${_scrollLockY}px`;
+  document.body.style.left = '0';
+  document.body.style.right = '0';
+  document.body.style.width = '100%';
+}
+function unlockBackgroundScroll() {
+  if (!document.body.dataset.scrollLocked) return;
+  delete document.body.dataset.scrollLocked;
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.left = '';
+  document.body.style.right = '';
+  document.body.style.width = '';
+  window.scrollTo(0, _scrollLockY);
+}
+function isAnySheetOpen() {
+  return [...document.querySelectorAll('.sheet-overlay')].some(o => !o.classList.contains('hidden'));
+}
 function openSheet(id) {
   const ov = document.getElementById(id);
   const sh = ov.querySelector('.sheet');
   if (sh) sh.style.transform = '';
   ov.classList.remove('hidden');
+  lockBackgroundScroll();
 }
-function closeSheet(id) { document.getElementById(id).classList.add('hidden'); }
+function closeSheet(id) {
+  document.getElementById(id).classList.add('hidden');
+  if (!isAnySheetOpen()) unlockBackgroundScroll();
+}
 
 function renderStudents() {
   const list = document.getElementById('student-list');
@@ -1012,10 +1040,12 @@ function attachDrag(el, opts) {
 function attachSheetDismiss(overlay) {
   const sheet = overlay.querySelector('.sheet');
   if (!sheet) return;
+  const id = overlay.id;
   attachDrag(overlay, {
-    onMoveY(dx, dy) {
+    onMoveY(dx, dy, t, e) {
       if (dy <= 0) { sheet.style.transform = 'translateY(0)'; return; }
       if (sheet.scrollHeight > sheet.clientHeight && sheet.scrollTop > 0) return;
+      if (e.cancelable) e.preventDefault();
       sheet.style.transition = 'none';
       sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
     },
@@ -1024,7 +1054,7 @@ function attachSheetDismiss(overlay) {
       const h = sheet.offsetHeight;
       if (dy > Math.min(130, h * 0.4)) {
         sheet.style.transform = `translateY(${h}px)`;
-        setTimeout(() => { overlay.classList.add('hidden'); sheet.style.transform = ''; }, 220);
+        setTimeout(() => { closeSheet(id); sheet.style.transform = ''; }, 220);
       } else {
         sheet.style.transform = '';
       }
@@ -1377,7 +1407,7 @@ function wireEvents() {
   document.getElementById('input-import').addEventListener('change', (e) => importBackup(e.target.files[0]));
 
   document.querySelectorAll('.sheet-overlay').forEach(ov => {
-    ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.add('hidden'); });
+    ov.addEventListener('click', (e) => { if (e.target === ov) closeSheet(ov.id); });
   });
 
   document.getElementById('btn-confirm-ok').addEventListener('click', () => _closeConfirm(true));
@@ -1398,7 +1428,7 @@ function doAppBack() {
   const sheets = [...document.querySelectorAll('.sheet-overlay')]
     .filter(o => !o.classList.contains('hidden'));
   if (sheets.length) {
-    sheets[sheets.length - 1].classList.add('hidden');
+    closeSheet(sheets[sheets.length - 1].id);
     return true;
   }
   const jump = document.getElementById('jump-panel');

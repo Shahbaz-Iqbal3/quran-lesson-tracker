@@ -8,6 +8,7 @@ const CORE_ASSETS = [
   './data/quran-data.json',
   './data/surah-index.json',
   './assets/fonts/amiri-quran-400.woff2',
+  './assets/fonts/indopak.woff2',
   './assets/fonts/inter-400.woff2',
   './assets/fonts/inter-500.woff2',
   './assets/fonts/inter-600.woff2',
