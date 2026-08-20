@@ -391,6 +391,7 @@ main.view {
 .reader-confirm:active { transform: translateX(-50%) scale(0.98); }
 
 /* ============ Sheets ============ */
+html.scroll-locked { overflow: hidden; }
 .sheet-overlay {
   position: fixed; inset: 0; background: rgba(23,32,29,0.4);
   z-index: 100; display: flex; align-items: flex-end; justify-content: center;

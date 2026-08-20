@@ -263,23 +263,13 @@ function showView(name) {
 
 let _scrollLockY = 0;
 function lockBackgroundScroll() {
-  if (document.body.dataset.scrollLocked) return;
+  if (document.documentElement.classList.contains('scroll-locked')) return;
   _scrollLockY = window.scrollY || document.documentElement.scrollTop || 0;
-  document.body.dataset.scrollLocked = '1';
-  document.body.style.position = 'fixed';
-  document.body.style.top = `-${_scrollLockY}px`;
-  document.body.style.left = '0';
-  document.body.style.right = '0';
-  document.body.style.width = '100%';
+  document.documentElement.classList.add('scroll-locked');
 }
 function unlockBackgroundScroll() {
-  if (!document.body.dataset.scrollLocked) return;
-  delete document.body.dataset.scrollLocked;
-  document.body.style.position = '';
-  document.body.style.top = '';
-  document.body.style.left = '';
-  document.body.style.right = '';
-  document.body.style.width = '';
+  if (!document.documentElement.classList.contains('scroll-locked')) return;
+  document.documentElement.classList.remove('scroll-locked');
   window.scrollTo(0, _scrollLockY);
 }
 function isAnySheetOpen() {
@@ -468,7 +458,7 @@ function renderStudentDetail() {
       row.querySelector('[data-action="share"]').addEventListener('click', (e) => { e.stopPropagation(); openShareSheet(lesson.id); });
       row.querySelector('[data-action="edit"]').addEventListener('click', (e) => { e.stopPropagation(); editLesson(lesson.id); });
       row.querySelector('[data-action="delete"]').addEventListener('click', (e) => { e.stopPropagation(); deleteLesson(lesson.id); });
-      row.addEventListener('click', () => openReader(lesson.surahId, lesson.startAyah));
+      row.querySelector('.history-body').addEventListener('click', () => openReader(lesson.surahId, lesson.startAyah));
       groupEl.appendChild(row);
     }
     historyList.appendChild(groupEl);
@@ -1033,7 +1023,8 @@ function attachDrag(el, opts) {
   el.addEventListener('touchend', finish);
   el.addEventListener('touchcancel', () => { active = false; if (opts.onCancel) opts.onCancel(); });
   el.addEventListener('click', (e) => {
-    if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; }
+    if (dragged && axis === 'x') { e.stopPropagation(); e.preventDefault(); }
+    dragged = false;
   }, true);
 }
 
@@ -1491,5 +1482,3 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
-
-
