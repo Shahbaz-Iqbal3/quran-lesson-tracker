@@ -1,0 +1,16 @@
+{
+  "name": "Sabaq — Quran Lesson Tracker",
+  "short_name": "Sabaq",
+  "description": "Track each student's daily Quran lesson and share it to WhatsApp as a card.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F6EFE0",
+  "theme_color": "#123832",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
