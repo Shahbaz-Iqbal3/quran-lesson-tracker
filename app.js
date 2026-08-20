@@ -754,7 +754,7 @@ function openReader(surahId, ayah, opts) {
   populateAyahSelect(surahId);
   document.getElementById('select-ayah').value = String(ayah || 1);
   renderReaderContent(surahId);
-  showView('reader');
+  showView('reader', undefined, false);
   document.getElementById('jump-panel').classList.add('hidden');
   document.getElementById('reader-content').classList.remove('hidden');
   document.getElementById('btn-reader-confirm').classList.add('hidden');

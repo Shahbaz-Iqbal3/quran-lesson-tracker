@@ -384,7 +384,21 @@ main.view {
   font-family: var(--font-arabic); font-size: 27px; line-height: 2.5;
   direction: rtl; text-align: justify; text-align-last: right; padding: 4px 2px 20px;
 }
-.ayah-flow { margin: 0; direction: rtl; font-family: 'Amiri Quran'; font-size: 37px; text-align: justify; line-height: 1.9; }
+.ayah-flow {
+  margin: 0; direction: rtl; font-family: 'Amiri Quran'; font-size: 37px;
+  text-align: right; line-height: 1.9;
+  padding: 0 12px;
+  border: 1.5px solid rgba(23, 107, 82, 0.55);
+  border-radius: 10px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(70.3px - 1px),
+    rgba(23, 107, 82, 0.38) calc(70.3px - 1px),
+    rgba(23, 107, 82, 0.38) 70.3px
+  );
+  background-position: 0 0;
+}
 .reader-content.inline-mode .surah-heading,
 .reader-content.inline-mode .bismillah { direction: ltr; }
 .ayah-inline {
