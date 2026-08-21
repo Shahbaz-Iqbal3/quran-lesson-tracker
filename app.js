@@ -440,12 +440,24 @@ function studentNextStart(student) {
 }
 
 async function loadQuranData() {
-  const [quranRes, indexRes] = await Promise.all([
+  const [quranRes, indexRes, rukuRes] = await Promise.all([
     fetch('data/quran-data.json'),
-    fetch('data/surah-index.json')
+    fetch('data/surah-index.json'),
+    fetch('data/ruku-data.json')
   ]);
   state.quran = await quranRes.json();
   state.surahIndex = await indexRes.json();
+  // { "<surahId>": [ayah, ayah, ...] } — each entry is the ayah a ruku starts at,
+  // in order, so index+1 is that ruku's number within the surah.
+  state.rukuStarts = await rukuRes.json();
+}
+
+/** Returns the ruku number (within its surah) that starts at this ayah, or null. */
+function rukuStartingAt(surahId, ayahNum) {
+  const starts = state.rukuStarts && state.rukuStarts[surahId];
+  if (!starts) return null;
+  const idx = starts.indexOf(ayahNum);
+  return idx === -1 ? null : idx + 1;
 }
 
 async function loadAppData() {
@@ -802,7 +814,9 @@ function renderReaderContent(surahId) {
       const span = document.createElement('span');
       span.className = 'ayah-inline';
       span.dataset.ayah = String(ayahNum);
-      span.innerHTML = `${text}<span class="ayah-badge-inline">${ayahNum}</span>`;
+      const rukuNo = rukuStartingAt(surahId, ayahNum);
+      const rukuBadge = rukuNo ? `<span class="ruku-badge-inline" title="Ruku ${rukuNo}">${rukuNo}</span>` : '';
+      span.innerHTML = `${text}<span class="ayah-badge-wrap">${rukuBadge}<span class="ayah-badge-inline">${ayahNum}</span></span>`;
       span.addEventListener('click', () => handleAyahTap(surahId, ayahNum, span));
       flow.appendChild(span);
       flow.appendChild(document.createTextNode(' '));
@@ -815,7 +829,9 @@ function renderReaderContent(surahId) {
       const block = document.createElement('div');
       block.className = 'ayah-block';
       block.dataset.ayah = String(ayahNum);
-      block.innerHTML = `<div class="ayah-num">${ayahNum}</div><div class="ayah-text">${text}</div>`;
+      const rukuNo = rukuStartingAt(surahId, ayahNum);
+      const rukuBadge = rukuNo ? `<span class="ruku-badge" title="Ruku ${rukuNo}">${rukuNo}</span>` : '';
+      block.innerHTML = `<div class="ayah-num">${ayahNum}${rukuBadge}</div><div class="ayah-text">${text}</div>`;
       block.addEventListener('click', () => handleAyahTap(surahId, ayahNum, block));
       container.appendChild(block);
     });

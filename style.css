@@ -372,6 +372,20 @@ main.view {
   display: flex; align-items: center; justify-content: center;
   font-size: calc(var(--quran-font-size) * 0.4); font-weight: 600;
   font-variant-numeric: tabular-nums; margin-top: calc(var(--quran-font-size) * 0.15);
+  position: relative;
+}
+/* Ruku marker — matches the small ع section-numbers printed in the Mushaf margin.
+   Shown as a badge on the ayah where each ruku begins. */
+.ruku-badge {
+  position: absolute; top: -7px; right: -7px;
+  min-width: calc(var(--quran-font-size) * 0.34);
+  height: calc(var(--quran-font-size) * 0.34);
+  padding: 0 3px; border-radius: 50%;
+  background: var(--warning); color: #fff;
+  font-family: var(--font-ui); font-size: calc(var(--quran-font-size) * 0.22); font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--surface); line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .ayah-text {
   font-family: var(--font-arabic); font-size: var(--quran-font-size); line-height: 2.1;
@@ -408,6 +422,18 @@ main.view {
   margin: 0 calc(var(--quran-font-size) * 0.15); border-radius: 50%;
   border: 1.3px solid var(--accent); color: var(--accent);
   font-family: var(--font-ui); font-size: calc(var(--quran-font-size) * 0.28); font-weight: 700; vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+.ayah-badge-wrap { position: relative; display: inline-flex; align-items: center; vertical-align: middle; }
+.ruku-badge-inline {
+  position: absolute; top: -6px; right: -2px;
+  min-width: calc(var(--quran-font-size) * 0.3);
+  height: calc(var(--quran-font-size) * 0.3);
+  padding: 0 3px; border-radius: 50%;
+  background: var(--warning); color: #fff;
+  font-family: var(--font-ui); font-size: calc(var(--quran-font-size) * 0.2); font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.2px solid var(--surface); line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
