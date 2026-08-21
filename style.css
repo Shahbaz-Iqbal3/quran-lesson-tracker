@@ -363,6 +363,9 @@ main.view {
   transition: background 150ms ease;
 }
 .ayah-block:active { background: var(--accent-soft); }
+.ayah-num-wrap {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+}
 .ayah-num {
   flex: none;
   width: calc(var(--quran-font-size) * 1.05);
@@ -372,20 +375,26 @@ main.view {
   display: flex; align-items: center; justify-content: center;
   font-size: calc(var(--quran-font-size) * 0.4); font-weight: 600;
   font-variant-numeric: tabular-nums; margin-top: calc(var(--quran-font-size) * 0.15);
-  position: relative;
 }
 /* Ruku marker — matches the small ع section-numbers printed in the Mushaf margin.
-   Shown as a badge on the ayah where each ruku begins. */
+   Shown as a badge beside the ayah where each ruku begins. */
 .ruku-badge {
-  position: absolute; top: -7px; right: -7px;
-  min-width: calc(var(--quran-font-size) * 0.34);
-  height: calc(var(--quran-font-size) * 0.34);
-  padding: 0 3px; border-radius: 50%;
-  background: var(--warning); color: #fff;
-  font-family: var(--font-ui); font-size: calc(var(--quran-font-size) * 0.22); font-weight: 800;
-  display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid var(--surface); line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: calc(var(--quran-font-size) * 0.44);
+  height: calc(var(--quran-font-size) * 0.44);
+  padding: 0 1px; border-radius: 50%;
+  color: var(--text);
+  font-family: var(--font-ui); font-weight: 800;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.ruku-badge .ruku-arabic {
+  font-size: calc(var(--quran-font-size) * 0.6);
+}
+.ruku-badge .ruku-num {
+  font-size: calc(var(--quran-font-size) * 0.22);
+  margin-left: 1px;
 }
 .ayah-text {
   font-family: var(--font-arabic); font-size: var(--quran-font-size); line-height: 2.1;
@@ -424,17 +433,24 @@ main.view {
   font-family: var(--font-ui); font-size: calc(var(--quran-font-size) * 0.28); font-weight: 700; vertical-align: middle;
   font-variant-numeric: tabular-nums;
 }
-.ayah-badge-wrap { position: relative; display: inline-flex; align-items: center; vertical-align: middle; }
+.ayah-badge-wrap { display: inline-flex; align-items: flex-start; vertical-align: middle; gap: 2px; }
 .ruku-badge-inline {
-  position: absolute; top: -6px; right: -2px;
-  min-width: calc(var(--quran-font-size) * 0.3);
-  height: calc(var(--quran-font-size) * 0.3);
-  padding: 0 3px; border-radius: 50%;
-  background: var(--warning); color: #fff;
-  font-family: var(--font-ui); font-size: calc(var(--quran-font-size) * 0.2); font-weight: 800;
-  display: flex; align-items: center; justify-content: center;
-  border: 1.2px solid var(--surface); line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: calc(var(--quran-font-size) * 0.44);
+  height: calc(var(--quran-font-size) * 0.44);
+  padding: 0 1px; border-radius: 50%;
+  color: #6e5501;
+  font-family: var(--font-ui); font-weight: 800;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.ruku-badge-inline .ruku-arabic {
+  font-size: calc(var(--quran-font-size) * 0.6);
+}
+.ruku-badge-inline .ruku-num {
+  font-size: calc(var(--quran-font-size) * 0.22);
+  margin-left: 1px;
 }
 
 .reader-confirm {

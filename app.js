@@ -456,7 +456,7 @@ async function loadQuranData() {
 function rukuStartingAt(surahId, ayahNum) {
   const starts = state.rukuStarts && state.rukuStarts[surahId];
   if (!starts) return null;
-  const idx = starts.indexOf(ayahNum);
+  const idx = starts.indexOf(ayahNum+1);
   return idx === -1 ? null : idx + 1;
 }
 
@@ -815,8 +815,8 @@ function renderReaderContent(surahId) {
       span.className = 'ayah-inline';
       span.dataset.ayah = String(ayahNum);
       const rukuNo = rukuStartingAt(surahId, ayahNum);
-      const rukuBadge = rukuNo ? `<span class="ruku-badge-inline" title="Ruku ${rukuNo}">${rukuNo}</span>` : '';
-      span.innerHTML = `${text}<span class="ayah-badge-wrap">${rukuBadge}<span class="ayah-badge-inline">${ayahNum}</span></span>`;
+      const rukuBadge = rukuNo ? `<span class="ruku-badge-inline" title="Ruku ${rukuNo}"><span class="ruku-num">${rukuNo}</span><span class="ruku-arabic">ع</span></span>` : '';
+      span.innerHTML = `${text}<span class="ayah-badge-wrap"><span class="ayah-badge-inline">${ayahNum}</span>${rukuBadge}</span>`;
       span.addEventListener('click', () => handleAyahTap(surahId, ayahNum, span));
       flow.appendChild(span);
       flow.appendChild(document.createTextNode(' '));
@@ -830,8 +830,8 @@ function renderReaderContent(surahId) {
       block.className = 'ayah-block';
       block.dataset.ayah = String(ayahNum);
       const rukuNo = rukuStartingAt(surahId, ayahNum);
-      const rukuBadge = rukuNo ? `<span class="ruku-badge" title="Ruku ${rukuNo}">${rukuNo}</span>` : '';
-      block.innerHTML = `<div class="ayah-num">${ayahNum}${rukuBadge}</div><div class="ayah-text">${text}</div>`;
+      const rukuBadge = rukuNo ? `<span class="ruku-badge" title="Ruku ${rukuNo}"><span class="ruku-arabic">ع</span><span class="ruku-num">${rukuNo}</span></span>` : '';
+      block.innerHTML = `<div class="ayah-num-wrap"><div class="ayah-num">${ayahNum}</div>${rukuBadge}</div><div class="ayah-text">${text}</div>`;
       block.addEventListener('click', () => handleAyahTap(surahId, ayahNum, block));
       container.appendChild(block);
     });
