@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sabaq-cache-v2.9';
+const CACHE_NAME = 'sabaq-cache-v3.0';
 const CORE_ASSETS = [
   './',
   './index.html',
