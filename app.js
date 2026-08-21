@@ -723,7 +723,7 @@ function renderStudentDetail() {
 }
 
 function populateSurahSelect() {
-  const optsHtml = state.surahIndex.map(s => `<option value="${s.id}">${s.id}. ${s.translit}</option>`).join('');
+  const optsHtml = state.surahIndex.map(s => `<option value="${s.id}">${s.id}. ${s.translit} (${s.name})</option>`).join('');
   document.getElementById('select-surah').innerHTML = optsHtml;
   document.getElementById('manual-surah').innerHTML = optsHtml;
   document.getElementById('select-student-surah').innerHTML = optsHtml;
